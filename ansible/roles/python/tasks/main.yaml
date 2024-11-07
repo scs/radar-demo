@@ -1,0 +1,12 @@
+- name: Install python venv
+  become: true
+  ansible.builtin.package:
+    name:
+      - python3-venv
+      - python3-pip
+    state: present
+- name: Install poetry
+  include_tasks: "{{ item }}"
+  loop:
+    - poetry.yaml
+    - pyenv.yaml
