@@ -1,0 +1,23 @@
+- name: check if poetry is installed
+  become: false
+  ansible.builtin.stat:
+    path: ~/.local/bin/poetry
+  register: poetry
+  tags: poetry
+- name: Fetch poetry installer
+  become: false
+  when: poetry.stat.exists == False
+  ansible.builtin.get_url:
+    url: https://install.python-poetry.org
+    dest: /tmp/poetry_installer.py
+  tags: poetry
+- name: Install poetry
+  become: false
+  when: poetry.stat.exists == False
+  ansible.builtin.shell: python3 /tmp/poetry_installer.py
+  tags: poetry
+- name: Config poetry
+  become: false
+  when: poetry.stat.exists == False
+  ansible.builtin.shell: ~/.local/bin/poetry config virtualenvs.in-project true
+  tags: poetry

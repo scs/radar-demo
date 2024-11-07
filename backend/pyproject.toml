@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "video_feed"
+version = "0.1.0"
+description = "plot"
+authors = ["David Stadelmann <david.stadelmann@scs.ch>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+Flask = "^3.0.2"
+numpy = "^1.26.4"
+pillow = "^10.2.0"
+matplotlib = "^3.8.3"
+pyright = "^1.1.366"
+flask-cors = "^4.0.1"
+asyncio = "^3.4.3"
+jsons = "^1.6.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest-black = "^0.3.12"
+isort = "^5.13.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 120
+
+[tool.pyright]
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+

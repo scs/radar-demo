@@ -1,0 +1,12 @@
+- name: Create launcher script
+  become: false
+  ansible.builtin.copy:
+    dest: ~/.local/share/applications/radar-demo.desktop
+    content: |
+      [Desktop Entry]
+      Type=Application
+      #Terminal=true
+      Name=Radar Demo
+      Icon={{ repo_dir }}/setup/radar.png
+      Exec={{ repo_dir }}/start_demo.sh
+    mode: '0644'

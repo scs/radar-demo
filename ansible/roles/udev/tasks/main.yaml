@@ -1,0 +1,18 @@
+- name: Create Udev Rule
+  become: true
+  ansible.builtin.copy:
+    src: 70-qdma.rules
+    dest: /etc/udev/rules.d/70-qdma.rules
+    owner: root
+    group: root
+    mode: '0644'
+    force: true
+- name: Create Script to setup qdma
+  become: true
+  ansible.builtin.copy:
+    src: start_qdma.sh
+    dest: /etc/udev/scripts/start_qdma.sh
+    owner: root
+    group: root
+    mode: '0755'
+    force: true

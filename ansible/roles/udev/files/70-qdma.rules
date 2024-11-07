@@ -1,0 +1,6 @@
+SUBSYSTEM=="pci", ATTR{vendor}=="0x10ee", ATTR{device}=="0xb024", DRIVERS=="?*", RUN+="/etc/udev/scripts/start_qdma.sh", GROUP="users", MODE="0660"
+SUBSYSTEM=="pci", ATTR{vendor}=="0x10ee", ATTR{device}=="0xb028", DRIVERS=="?*", RUN+="/etc/udev/scripts/start_qdma.sh", GROUP="users", MODE="0660"
+SUBSYSTEM=="pci", ATTR{vendor}=="0x10ee", ATTR{device}=="0xb034", DRIVERS=="?*", RUN+="/etc/udev/scripts/start_qdma.sh", GROUP="users", MODE="0660"
+SUBSYSTEM=="pci", ATTR{vendor}=="0x10ee", ATTR{device}=="0xb038", DRIVERS=="?*", RUN+="/etc/udev/scripts/start_qdma.sh", GROUP="users", MODE="0660"
+SUBSYSTEM=="pci", ATTR{vendor}=="0x10ee", ATTR{device}=="0xb044", DRIVERS=="?*", RUN+="/etc/udev/scripts/start_qdma.sh", GROUP="users", MODE="0660"
+SUBSYSTEM=="pci", ATTR{vendor}=="0x10ee", ATTR{device}=="0xb048", DRIVERS=="?*", RUN+="/etc/udev/scripts/start_qdma.sh", GROUP="users", MODE="0660"
