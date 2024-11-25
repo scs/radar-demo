@@ -1,3 +1,15 @@
+- name: Place the start_demo script in $HOME
+  become: false
+  ansible.builtin.copy:
+    src: start_demo.sh
+    dest: ~/.
+    mode: '0755'
+- name: Place the icon script in $HOME/.icons
+  become: false
+  ansible.builtin.copy:
+    src: radar.png
+    dest: ~/.icons/radar.png
+    mode: '0644'
 - name: Create launcher script
   become: false
   ansible.builtin.copy:
@@ -7,6 +19,6 @@
       Type=Application
       #Terminal=true
       Name=Radar Demo
-      Icon={{ repo_dir }}/setup/radar.png
-      Exec={{ repo_dir }}/start_demo.sh
+      Icon=radar.png
+      Exec=~/start_demo.sh
     mode: '0644'
