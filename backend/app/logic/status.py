@@ -133,7 +133,7 @@ class Fft1DInfo(HwInfo):
             batch_size = GlobalState.get_current_batch_size()
             mean = np.mean(self.frame_rate)
             fft_per_sec_val = int(batch_size * mean)
-            return f"{fft_per_sec_val}"
+            return f"{fft_per_sec_val:,}"
 
 
 @dataclass
@@ -173,7 +173,7 @@ class RangeDopplerInfo(HwInfo):
             if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
                 channels /= 4
             fft_per_sec_val = int(channels * (range_size + doppler_size) * mean)
-            return f"{fft_per_sec_val}"
+            return f"{fft_per_sec_val:,}"
 
 
 benchmark_info = Fft1DInfo()
