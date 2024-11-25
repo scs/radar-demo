@@ -1,3 +1,4 @@
 *.ub filter=lfs diff=lfs merge=lfs -text
 setup/hw/* filter=lfs diff=lfs merge=lfs -text
 backend/app/static/**/* filter=lfs diff=lfs merge=lfs -text
+*.png

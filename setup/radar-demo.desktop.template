@@ -1,6 +1,0 @@
-[Desktop Entry]
-Type=Application
-#Terminal=true
-Name=Radar Demo
-Icon=/home/administrator/.local/share/radar.png
-Exec=FIXME/start_demo.sh
