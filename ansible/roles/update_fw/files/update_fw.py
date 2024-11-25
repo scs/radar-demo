@@ -39,8 +39,12 @@ def target() -> str:
 def copy_files(dir: Path, target: str):
     file_list = [p for p in Path(dir).iterdir() if p.is_file()]
     for file in file_list:
-        print(f"scp -6 {file} {target}")
-        _ = os.system(f"scp -6 {file} {target}")
+        print(
+            f"scp -6 -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null {file} {target}"
+        )
+        _ = os.system(
+            f"scp -6 -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null {file} {target}"
+        )
 
 
 if __name__ == "__main__":
