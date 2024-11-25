@@ -1,5 +1,5 @@
 - name: Update the FPGA card
-  become: false
+  become: true
   ansible.builtin.shell: ./update_fw.py -s hw
   args:
     chdir: "{{ playbook_dir }}/roles/update_fw/files"

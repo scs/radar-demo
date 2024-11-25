@@ -12,6 +12,8 @@
       - make
       - gcc-12
       - build-essential
+      - libaio1
+      - libaio-dev
 - name: "Compile libqdma for Kernel {{ kernel }}"
   become: false
   ansible.builtin.command:

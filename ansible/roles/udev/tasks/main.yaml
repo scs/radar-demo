@@ -7,6 +7,12 @@
     group: root
     mode: '0644'
     force: true
+- name: Create /etc/udev/scripts directory if it does not exist
+  become: true
+  ansible.builtin.file:
+    path: /etc/udev/scripts
+    state: directory
+    mode: '0755'
 - name: Create Script to setup qdma
   become: true
   ansible.builtin.copy:

@@ -4,11 +4,11 @@
     src: start_demo.sh
     dest: ~/.
     mode: '0755'
-- name: Place the icon script in $HOME/.icons
+- name: Place the icon in $HOME/.local/share
   become: false
   ansible.builtin.copy:
     src: radar.png
-    dest: ~/.icons/radar.png
+    dest: ~/.local/share/radar.png
     mode: '0644'
 - name: Create launcher script
   become: false
