@@ -175,6 +175,8 @@ batch_size_setting = Setting(
         ValueMap(label="1024", availableOptions=[]),
         ValueMap(label="2048", availableOptions=[]),
         ValueMap(label="4096", availableOptions=[]),
+        ValueMap(label="8192", availableOptions=[]),
+        ValueMap(label="16384", availableOptions=[]),
     ],
     allOptions=[],
     selected=Selected(type="1024", option=None),

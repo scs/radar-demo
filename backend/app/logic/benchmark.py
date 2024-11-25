@@ -65,17 +65,18 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
     fft_data = fft_data * samples
     _ = plt.ioff()
     fig, ax = plt.subplots(figsize=(5, 5), dpi=200)
-    [line] = ax.plot(x, np.abs(fft_data))
-    line.set_data(x, np.abs(fft_data))
+    absval = np.abs(fft_data)
+    [line] = ax.plot(x, absval)
+    line.set_data(x, absval)
     _ = ax.axis("off")
-    return (fig, line, x)
+    return (fig, line, x, np.max(absval))
 
 
 def gen_frames() -> Generator[Any, Any, Any]:
     amplitude = 32
     samples = 512
     scale = samples * amplitude
-    fig, line, x = setup_plot(samples, amplitude)
+    fig, line, x, maxval = setup_plot(samples, amplitude)
     timer = Timer("benchmark")
 
     while GlobalState.get_current_model() == Model.ONE_D_FFT.value:
@@ -93,6 +94,7 @@ def gen_frames() -> Generator[Any, Any, Any]:
                 hw_data[..., 1] = signal.imag
                 hw_data = hw_data.astype(np.int16)
                 batch_size = GlobalState.get_current_batch_size()
+                print(f"current batch size = {batch_size}")
                 send_1d_fft_data(
                     hw_data,
                     2 * samples * ctypes.sizeof(ctypes.c_int16),
@@ -103,10 +105,12 @@ def gen_frames() -> Generator[Any, Any, Any]:
                 real = fft_data[..., 0].astype(float)
                 imag = fft_data[..., 1].astype(float)
                 amp = np.sqrt(real**2 + imag**2)
+                amp = amp/np.max(amp)*maxval
                 line.set_data(x, amp)
             else:
                 fft_data = np.fft.fft(signal, samples, norm="forward")
-                fft_data = fft_data * scale / amplitude
+                fft_data = np.abs(fft_data) * scale / amplitude
+                fft_data = fft_data/np.max(fft_data)*maxval
                 line.set_data(x, np.abs(fft_data))
 
             buf = BytesIO()

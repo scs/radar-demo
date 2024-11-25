@@ -100,8 +100,8 @@ class Fft1DInfo(HwInfo):
 
     def aie_load_percent(self, settings: Settings) -> str | None:  # pyright: ignore [reportImplicitOverride]
         map_min_time = {
-            512: 0.0000009,
-            1024: 0.0000018,
+            512: 0.0000008,
+            1024: 0.0000016,
         }
 
         device = settings.get_device()
@@ -120,20 +120,22 @@ class Fft1DInfo(HwInfo):
                 retval = "nil"
             else:
                 if load == 0:
-                    load += 0.00001
+                    return "-"
                 retval_format = '"{' + f"load:.{int(max(1+math.log10(1/load), 0))}f" + '}%"'
                 retval = eval(f"f{retval_format}")  # pyright: ignore [reportAny]
             return retval
+
+    def fft_per_sec_int(self, settings: Settings) -> int:
+        batch_size = GlobalState.get_current_batch_size()
+        mean = np.mean(self.frame_rate)
+        return int(batch_size * mean)
 
     def fft_per_sec(self, settings: Settings) -> str:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
         if device == ComputePlatform.PC_EMULATION.value:
             return str(self.fps)
         else:
-            batch_size = GlobalState.get_current_batch_size()
-            mean = np.mean(self.frame_rate)
-            fft_per_sec_val = int(batch_size * mean)
-            return f"{fft_per_sec_val:,}"
+            return f"{self.fft_per_sec_int(settings):,}"
 
 
 @dataclass
@@ -141,39 +143,40 @@ class RangeDopplerInfo(HwInfo):
     num_aie_used: int = 2
 
     def aie_load_percent(self, settings: Settings) -> str | None:  # pyright: ignore [reportImplicitOverride]
-        max_fft_per_sec = 1 / 0.0000009 + 1 / 0.0000018
+        max_fft_per_sec = 1 / 0.0000008 + 1 / 0.0000016
         device = settings.get_device()
         if device == ComputePlatform.PC_EMULATION.value:
             return "-"
         else:
             load = -1
-            fftps = int(self.fft_per_sec(settings))
-            load = fftps / max_fft_per_sec * 100
+            load = self.fft_per_sec_int(settings) / max_fft_per_sec * 100
 
             if load == -1:
                 retval = "nil"
             else:
                 if load == 0:
-                    load += 0.01
+                    return "-"
                 retval_format = '"{' + f"load:.{int(max(1+math.log10(1/load), 0))}f" + '}%"'
                 retval = eval(f"f{retval_format}")  # pyright: ignore [reportAny]
             return retval
 
+    def fft_per_sec_int(self,settings: Settings) -> int:
+        range_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
+        doppler_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
+        range_size = int(range_config)
+        doppler_size = int(doppler_config)
+        mean = np.mean(self.frame_rate)
+        channels = 16
+        if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
+            channels /= 4
+        return int(channels * (range_size + doppler_size) * mean)
+
     def fft_per_sec(self, settings: Settings) -> str:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
         if device == ComputePlatform.PC_EMULATION.value:
-            return str(self.fps)
+            return "-"
         else:
-            range_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
-            doppler_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
-            range_size = int(range_config)
-            doppler_size = int(doppler_config)
-            mean = np.mean(self.frame_rate)
-            channels = 16
-            if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
-                channels /= 4
-            fft_per_sec_val = int(channels * (range_size + doppler_size) * mean)
-            return f"{fft_per_sec_val:,}"
+            return f"{self.fft_per_sec_int(settings):,}"
 
 
 benchmark_info = Fft1DInfo()

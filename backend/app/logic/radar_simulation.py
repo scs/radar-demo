@@ -55,6 +55,8 @@ def start_threads(idx: int) -> None:
     global consumer
     global converter
     if idx == 0:
+        _ = mutex_lock.acquire()
+        reset_fifos()
         producer = threading.Thread(target=send_radar_scene, name="producer")
         producer.start()
         consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
@@ -87,7 +89,6 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
         Model.IMAGING.value,
     ]:
         time.sleep(0.001)
-    _ = mutex_lock.acquire()
 
     stop_producer.clear()
     start_threads(idx)
