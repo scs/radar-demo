@@ -12,9 +12,11 @@
     - role: kernel
     - role: libqdma
     - role: udev
-    - role: socat
     - role: direnv
     - role: python
+    - role: radardemo_py_infra
+    - role: socat
+    - role: update_fw
     - role: grub
   tasks:
     - name: Install System Packages

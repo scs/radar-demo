@@ -21,15 +21,6 @@
     group: root
     mode: '0644'
     force: true
-- name: Install socat-forward shell script
-  become: true
-  ansible.builtin.copy:
-    src: infra
-    dest: /usr/local/bin/infra
-    owner: root
-    group: root
-    mode: '0644'
-    force: true
 - name: Install python3 script to get devices by purpose
   become: true
   ansible.builtin.copy:

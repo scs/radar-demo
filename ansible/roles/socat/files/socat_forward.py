@@ -2,8 +2,8 @@
 import re
 import subprocess
 
-from .infra.eth_devices import EthDevices
-from .infra.fpga_serial import FpgaSerial
+from radardemoinfra.eth_devices import EthDevices
+from radardemoinfra.fpga_serial import FpgaSerial
 
 
 def get_ipv4_address(device: str) -> str:
