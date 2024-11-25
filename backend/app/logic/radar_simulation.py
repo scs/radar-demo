@@ -39,6 +39,14 @@ radar_result_queues = [queue.Queue(), queue.Queue(), queue.Queue(), queue.Queue(
 radar_send_queue = queue.Queue(maxsize=7)
 radar_receive_queue = queue.Queue(maxsize=7)
 stop_producer = threading.Event()
+mutex_lock = threading.Lock()
+
+
+def reset_fifos() -> bool:
+    if STATIC_CONFIG.versal_lib:
+        err = STATIC_CONFIG.versal_lib.reset_hw()
+        return err == 0
+    return True
 
 
 def start_threads(idx: int) -> None:
@@ -79,6 +87,8 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
         Model.IMAGING.value,
     ]:
         time.sleep(0.001)
+    _ = mutex_lock.acquire()
+
     stop_producer.clear()
     start_threads(idx)
     timer = Timer("gen_frames")
@@ -95,6 +105,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
 
     logger.info(f"Stopping threads {GlobalState.get_current_model()}")
     stop_threads(idx)
+    mutex_lock.release()
 
 
 def send_scene(mode: int, step: int, emulation: int) -> bool:
@@ -211,7 +222,7 @@ def create_frame(rgb_array: NDArray[np.uint8]):
 def synthetic_result(current_step: int, channel: int) -> NDArray[np.int32]:
     timer = Timer(name="synthetic_result")
     phase: NDArray[np.float32] = 2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
-    ypos = int((np.cos(phase + np.pi)*0.9+1) / 2 * 1023)
+    ypos = int((np.cos(phase + np.pi) * 0.9 + 1) / 2 * 1023)
     xpos = 511 + int(
         (np.sin(phase)) * 480 / (STATIC_CONFIG.period_in_seconds[channel] / (STATIC_CONFIG.period_in_seconds[0] - 0.5))
     )
