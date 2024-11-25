@@ -1,4 +1,4 @@
-- name: Install Kenrel 6.2.0 image
+- name: "Install Kernel {{ kernel }} image"
   become: true
   ansible.builtin.package:
     name:
