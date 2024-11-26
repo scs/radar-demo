@@ -13,6 +13,12 @@
     path: /etc/udev/scripts
     state: directory
     mode: '0755'
+- name: Put user in users group
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_user_id }}"
+    groups: users
+    append: true
 - name: Create Script to setup qdma
   become: true
   ansible.builtin.copy:
