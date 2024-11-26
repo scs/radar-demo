@@ -58,7 +58,7 @@ def get_current_signal(samples: int, amplitude: int) -> NDArray[np.int32]:
     return signal
 
 
-def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np.signedinteger[Any]]]:
+def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np.signedinteger[Any]], float]:
     x = np.arange(0, samples)
     signal = get_current_signal(samples, amplitude)
     fft_data = np.fft.fft(signal, samples, norm="forward")
@@ -87,30 +87,39 @@ def gen_frames() -> Generator[Any, Any, Any]:
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
             time.sleep(0.1)
         else:
+            signal_timer = Timer(name="signal generation")
             signal = get_current_signal(samples, amplitude)
+            signal_timer.log_time()
             if GlobalState.use_hw():
+                data_arangement_timer = Timer(name="Data Arangement")
+                batch_size = GlobalState.get_current_batch_size()
                 hw_data = np.zeros((samples, 2))
                 hw_data[..., 0] = signal.real
                 hw_data[..., 1] = signal.imag
                 hw_data = hw_data.astype(np.int16)
-                batch_size = GlobalState.get_current_batch_size()
-                print(f"current batch size = {batch_size}")
+                data_arangement_timer.log_time()
+                send_timer = Timer(name="PCIe Send")
                 send_1d_fft_data(
                     hw_data,
                     2 * samples * ctypes.sizeof(ctypes.c_int16),
                     batch_size,
                 )
+                send_timer.log_time()
+                receive_timer = Timer(name="PCIe Receive")
                 fft_data = np.zeros((samples, 2)).astype(np.int16)
                 receive_1d_fft_results(fft_data, 2 * samples * ctypes.sizeof(ctypes.c_int16))
+                receive_timer.log_time()
+                plot_timer = Timer(name="Plot")
                 real = fft_data[..., 0].astype(float)
                 imag = fft_data[..., 1].astype(float)
                 amp = np.sqrt(real**2 + imag**2)
-                amp = amp/np.max(amp)*maxval
+                amp = amp / np.max(amp) * maxval
                 line.set_data(x, amp)
+                plot_timer.log_time()
             else:
                 fft_data = np.fft.fft(signal, samples, norm="forward")
                 fft_data = np.abs(fft_data) * scale / amplitude
-                fft_data = fft_data/np.max(fft_data)*maxval
+                fft_data = fft_data / np.max(fft_data) * maxval
                 line.set_data(x, np.abs(fft_data))
 
             buf = BytesIO()
