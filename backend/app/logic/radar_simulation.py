@@ -55,31 +55,38 @@ def start_threads(idx: int) -> None:
     global consumer
     global converter
     if idx == 0:
-        _ = mutex_lock.acquire()
-        reset_fifos()
-        producer = threading.Thread(target=send_radar_scene, name="producer")
-        producer.start()
-        consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
-        consumer.start()
-        converter = threading.Thread(target=create_radar_result, name="converter")
-        converter.start()
+        logger.info("Wait for mutex")
+        locked = mutex_lock.acquire(timeout=0.1)
+        if locked:
+            logger.info("Mutex aquired")
+            reset_fifos()
+            producer = threading.Thread(target=send_radar_scene, name="producer")
+            producer.start()
+            consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
+            consumer.start()
+            converter = threading.Thread(target=create_radar_result, name="converter")
+            converter.start()
 
 
 def stop_threads(idx: int) -> None:
+    logger.info("Stopping threads")
     stop_producer.set()
     if idx == 0:
         # converter only stops once producer and consumer is stopped so we only need to wait for the converter
         converter.join()
 
-    # Empty queues to have a clean slate
-    while not radar_receive_queue.empty():
-        _ = radar_receive_queue.get()
+        # Empty queues to have a clean slate
+        while not radar_receive_queue.empty():
+            _ = radar_receive_queue.get()
 
-    for idx in range(0, 4):
-        while not radar_result_queues[idx].empty():
-            _ = radar_result_queues[idx].get()
+        for idx in range(0, 4):
+            while not radar_result_queues[idx].empty():
+                _ = radar_result_queues[idx].get()
 
-    range_doppler_info.reset()
+        range_doppler_info.reset()
+
+        logger.info("Releasing mutex")
+        mutex_lock.release()
 
 
 def gen_frames(idx: int) -> Generator[Any, Any, Any]:
@@ -94,10 +101,15 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
     start_threads(idx)
     timer = Timer("gen_frames")
 
+    counter = 0
     while GlobalState.get_current_model() in [Model.SHORT_RANGE.value, Model.QUAD_CORNER.value, Model.IMAGING.value]:
+        logger.info(f"{counter} Current Model = {GlobalState.get_current_model()}")
+        counter += 1
         try:
             frame = radar_result_queues[idx].get_nowait()
+            logger.info("Before yield")
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
+            logger.info("After yield")
             duration = timer.duration()
             range_doppler_info.fps = int(1 / duration)
         except queue.Empty:
@@ -106,7 +118,6 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
 
     logger.info(f"Stopping threads {GlobalState.get_current_model()}")
     stop_threads(idx)
-    mutex_lock.release()
 
 
 def send_scene(mode: int, step: int, emulation: int) -> bool:
