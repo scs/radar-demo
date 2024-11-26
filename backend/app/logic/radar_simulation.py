@@ -59,7 +59,7 @@ def start_threads(idx: int) -> None:
         locked = mutex_lock.acquire(timeout=0.1)
         if locked:
             logger.info("Mutex aquired")
-            reset_fifos()
+            _ = reset_fifos()
             producer = threading.Thread(target=send_radar_scene, name="producer")
             producer.start()
             consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
@@ -103,13 +103,10 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
 
     counter = 0
     while GlobalState.get_current_model() in [Model.SHORT_RANGE.value, Model.QUAD_CORNER.value, Model.IMAGING.value]:
-        logger.info(f"{counter} Current Model = {GlobalState.get_current_model()}")
         counter += 1
         try:
             frame = radar_result_queues[idx].get_nowait()
-            logger.info("Before yield")
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
-            logger.info("After yield")
             duration = timer.duration()
             range_doppler_info.fps = int(1 / duration)
         except queue.Empty:
