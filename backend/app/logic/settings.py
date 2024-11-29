@@ -91,6 +91,7 @@ class Settings:
         self.settings.append(setting)
 
     def __iter__(self):
+        self.index = 0
         return self
 
     def __next__(self):

@@ -39,16 +39,20 @@ class StaticConfig:
         lib_option = LibOption.HW.value
 
         if Path.exists(DATA_SERVER):
-            self.versal_lib = cdll.LoadLibrary(str(DATA_SERVER))
-            if self.versal_lib:
-                return_code: int = self.versal_lib.init_server(lib_option)
-                if return_code != lib_option:
-                    logger.error(f"Failed to open Shared Object return code was {return_code} expected {lib_option}")
-                    self.versal_lib = None
+            try:
+                self.versal_lib = cdll.LoadLibrary(str(DATA_SERVER))
+                if self.versal_lib:
+                    return_code: int = self.versal_lib.init_server(lib_option)
+                    if return_code != lib_option:
+                        logger.error(f"Failed to open Shared Object return code was {return_code} expected {lib_option}")
+                        self.versal_lib = None
+            except Exception:
+                self.versal_lib = None
 
     @property
-    def number_of_steps_in_period(self) -> NDArray[np.int32]:
-        return self.frame_rate_per_second * self.period_in_seconds
+    def number_of_steps_in_period(self) :
+        ret: NDArray[np.int32] = self.frame_rate_per_second * self.period_in_seconds
+        return ret
 
     @property
     def stopped_image(self) -> Image.Image:
