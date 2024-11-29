@@ -1,0 +1,5 @@
+- name: Install sshd
+  become: true
+  ansible.builtin.package:
+    name:
+      - openssh-server

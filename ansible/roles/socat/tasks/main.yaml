@@ -1,0 +1,39 @@
+- name: Install socat
+  become: true
+  ansible.builtin.package:
+    name:
+      - socat
+      - python3-serial
+      - tio
+    state: present
+- name: Put user in dialout group
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_user_id }}"
+    groups: dialout
+    append: true
+- name: Define socat-forward service
+  become: true
+  ansible.builtin.copy:
+    src: socat-forward.service
+    dest: /etc/systemd/system/socat-forward.service
+    owner: root
+    group: root
+    mode: '0644'
+    force: true
+- name: Install python3 script to get devices by purpose
+  become: true
+  ansible.builtin.copy:
+    src: socat_forward.py
+    dest: /usr/local/bin/socat_forward.py
+    owner: root
+    group: root
+    mode: '0755'
+    force: true
+- name: Start and enable socat-forward service
+  become: true
+  ansible.builtin.systemd:
+    name: socat-forward
+    daemon_reload: true
+    state: started
+    enabled: true

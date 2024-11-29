@@ -1,0 +1,10 @@
+- name: "Install Kernel {{ kernel }} image"
+  become: true
+  ansible.builtin.package:
+    name:
+      - "linux-image-{{ kernel }}-generic"
+      - "linux-headers-{{ kernel }}-generic"
+      - "linux-modules-{{ kernel }}-generic"
+      - "linux-modules-extra-{{ kernel }}-generic"
+      - "linux-source-{{ kernel_base }}"
+    state: present

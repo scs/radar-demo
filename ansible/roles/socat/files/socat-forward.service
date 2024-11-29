@@ -1,0 +1,11 @@
+[Unit]
+Description=Socat IPv4 to IPv6 Port Forwarding
+After=network.target
+
+[Service]
+Type=simple
+WorkingDir=/usr/local/bin/
+ExecStart=/usr/local/bin/socat_forward.py
+
+[Install]
+WantedBy=multi-user.target

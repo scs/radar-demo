@@ -1,0 +1,7 @@
+- name: Install python venv
+  become: true
+  ansible.builtin.package:
+    name:
+      - python3-venv
+      - python3-pip
+    state: present

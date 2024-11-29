@@ -1,0 +1,22 @@
+- name: Install build dependencies
+  become: true
+  ansible.builtin.package:
+    name:
+      - make
+      - gcc-12
+      - build-essential
+- name: Copy ASIX USB NIC driver sources to /tmp
+  become: false
+  ansible.builtin.unarchive:
+    src: ASIX_USB_NIC_Linux_Driver_Source_v3.4.0.tar.bz2
+    dest: /tmp
+- name: Build ASIX USB NIC driver
+  become: false
+  ansible.builtin.command:
+    cmd: make KDIR=/lib/modules/{{ kernel }}-generic/build
+    chdir: /tmp/ASIX_USB_NIC_Linux_Driver_Source_v3.4.0
+- name: Install ASIX USB NIC driver
+  become: true
+  ansible.builtin.command:
+    cmd: make install
+    chdir: /tmp/ASIX_USB_NIC_Linux_Driver_Source_v3.4.0

@@ -1,0 +1,31 @@
+- name: "Modify grub menu default selection to use {{ kernel }}"
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_DEFAULT=.*'
+    line: 'GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux {{ kernel }}-generic"'
+    state: present
+- name: Modify grub menu to save last
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_SAVEDEFAULT=.*'
+    line: "GRUB_SAVEDEFAULT=true"
+    state: absent
+- name: Modify grub timeout
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_TIMEOUT=.*'
+    line: "GRUB_TIMEOUT=3"
+    state: present
+- name: Modify grub timeout style
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_TIMEOUT_STYLE=.*'
+    line: "GRUB_TIMEOUT_STYLE=menu"
+    state: present
+- name: Update Grub
+  become: true
+  ansible.builtin.command: update-grub

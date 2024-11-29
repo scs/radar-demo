@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "radardemoinfra"
+version = "1.0.0"
+description = "Infrastructure scripts for dealing with the radar demo fpga card"
+authors = ["David Stadelmann <david.stadelmann@scs.ch>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,33 @@
+- name: Setup Radar Demo
+  hosts: dev
+  vars:
+    kernel_base: "6.2.0"
+    kernel_patch: "39"
+    kernel: "{{ kernel_base }}-{{ kernel_patch }}"
+    repo_dir: "{{ playbook_dir | dirname }}"
+  roles:
+    - role: distupgrade
+    - role: bash
+    - role: sshd
+    - role: launcher
+    - role: kernel
+    - role: asix
+    - role: libqdma
+    - role: udev
+    - role: direnv
+    - role: python
+    - role: poetry
+    - role: pyenv
+    - role: radardemo_py_infra
+    - role: socat
+    - role: grub
+  tasks:
+    - name: Install System Packages
+      become: true
+      ansible.builtin.package:
+        name:
+          - chromium-browser
+          - curl
+          - htop
+          - git
+        state: present

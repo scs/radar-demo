@@ -1,0 +1,28 @@
+- name: Clone libqdma git repository
+  become: false
+  ansible.builtin.git:
+    repo: 'https://github.com/Xilinx/dma_ip_drivers.git'
+    dest: /tmp/dma_ip_drivers
+    depth: 1
+  register: libqdma
+- name: Install build dependencies
+  become: true
+  ansible.builtin.package:
+    name:
+      - make
+      - gcc-12
+      - build-essential
+      - libaio1
+      - libaio-dev
+- name: "Compile libqdma for Kernel {{ kernel }}"
+  become: false
+  ansible.builtin.command:
+    cmd: make KSRC=/lib/modules/{{ kernel }}-generic/build KOBJ=/lib/modules/{{ kernel }}-generic/build
+    chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
+  when: libqdma.changed
+- name: "Install qdma modules for Kernel {{ kernel }}"
+  become: true
+  ansible.builtin.command:
+    cmd: make install KSRC=/lib/modules/{{ kernel }}-generic/build KOBJ=/lib/modules/{{ kernel }}-generic/build
+    chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
+  when: libqdma.changed

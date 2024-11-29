@@ -1,0 +1,20 @@
+- name: Install direnv
+  become: true
+  ansible.builtin.package:
+    name: direnv
+    state: present
+- name: Setup shell environment for direnv
+  become: false
+  blockinfile:
+    path: "~/.bashrc"
+    marker: "# {mark} ANSIBLE MANAGED direnv setup"
+    block: |
+      eval "$(direnv hook bash)"
+    state: present
+    create: true
+- name: create poetry layout
+  become: false
+  copy:
+    src: direnvrc
+    dest: "~/.direnvrc"
+    mode: '0644'

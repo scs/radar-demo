@@ -1,0 +1,10 @@
+- name: Set environment variables in .bashrc
+  become: false
+  blockinfile:
+    path: "~/.bashrc"
+    marker: "# {mark} ANSIBLE MANAGED environment variables DON'T MODIFY OR DELETE"
+    block: |
+      export PATH=".local/bin":"$PATH"
+      export XDG_CONFIG_HOME=~/.config
+    state: present
+    create: true
