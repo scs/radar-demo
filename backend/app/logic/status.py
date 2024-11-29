@@ -6,6 +6,7 @@ from flask import Response, jsonify
 from numpy.lib import math
 from numpy.typing import NDArray
 
+from app.logic.config import STATIC_CONFIG
 from app.logic.model import Model
 from app.logic.settings import ComputePlatform, SettingLabel, Settings, get_number_of_ai_elements
 from app.logic.state import GlobalState
@@ -16,8 +17,14 @@ WIN_SIZE = 20
 def get_info():
     settings = GlobalState.get_current_settings()
     if GlobalState.get_current_model() == Model.ONE_D_FFT.value:
+        if STATIC_CONFIG.versal_lib:
+            benchmark_info.temperature = STATIC_CONFIG.versal_lib.get_temp_val() / 128.0
+            benchmark_info.power = STATIC_CONFIG.versal_lib.get_power_val() / 1000.0
         return benchmark_info.get_info(settings)
     else:
+        if STATIC_CONFIG.versal_lib:
+            range_doppler_info.temperature = STATIC_CONFIG.versal_lib.get_temp_val() / 128.0
+            range_doppler_info.power = STATIC_CONFIG.versal_lib.get_power_val() / 1000.0
         return range_doppler_info.get_info(settings)
 
 
@@ -29,6 +36,7 @@ def gen_radar_data() -> Response:
 class HwInfo(ABC):
     frame_rate: NDArray[np.int32] = field(default_factory=lambda: np.zeros(WIN_SIZE).astype(np.int32))
     power: float = 0
+    temperature: float = 0
     num_aie_used: int = 1
 
     def reset(self) -> None:
@@ -55,6 +63,13 @@ class HwInfo(ABC):
             return "-"
         else:
             return f"{self.power:.2f} W"
+
+    @property
+    def temp(self) -> str:
+        if self.temperature == 0:
+            return "-"
+        else:
+            return f"{self.temperature:.1f} °C"
 
     def number_of_aie_used(self, settings: Settings) -> str:
         device = settings.get_device()
@@ -83,6 +98,7 @@ class HwInfo(ABC):
                 "value": f"{self.int2str(self.fps)} fps",
             },
             {"label": "Power", "value": f"{self.watt}"},
+            {"label": "Temp", "value": f"{self.temp}"},
             {
                 "label": "AIE used",
                 "value": f"{self.number_of_aie_used(settings)}",
