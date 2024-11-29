@@ -137,7 +137,7 @@ def current_send_step() -> int:
 def send_radar_scene():
     timer = Timer("send_radar_scene")
     if GlobalState.has_hw():
-        mode = {Model.SHORT_RANGE.value: 0, Model.QUAD_CORNER.value: 1}
+        mode = {Model.SHORT_RANGE.value: 0, Model.QUAD_CORNER.value: 1, Model.IMAGING.value: 2}
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 if not radar_send_queue.full():
