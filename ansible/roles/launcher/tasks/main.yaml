@@ -1,8 +1,21 @@
 - name: Place the start_demo script in $HOME
   become: false
   ansible.builtin.copy:
-    src: start_demo.sh
-    dest: ~/.
+    content: |
+      #!/bin/bash
+      SCRIPT=$(readlink -f "$0")
+      SCRIPTPATH=$(dirname "$SCRIPT")
+      cd {{ playbook_dir }}/../backend || exit 1
+      eval "$(direnv export bash)"
+      killall python3
+      direnv allow .
+      poetry install
+      cd /
+      cd {{ playbook_dir }}/../backend || exit 1
+      python3 run.py &
+      sleep 10
+      chromium-browser --ozone-platform=wayland --app=http://127.0.0.1:5000 --start-fullscreen
+    dest: ~/start_demo.sh
     mode: '0755'
 - name: Place the icon in $HOME/.local/share
   become: false

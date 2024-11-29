@@ -17,7 +17,6 @@
     - role: direnv
     - role: python
     - role: poetry
-    - role: pyenv
     - role: radardemo_py_infra
     - role: socat
     - role: grub
