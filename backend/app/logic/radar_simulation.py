@@ -263,8 +263,10 @@ def create_radar_result():
             time.sleep(0.04)
 
         elif GlobalState.use_hw():
-            try:
-                results: NDArray[np.int16] = radar_receive_queue.get_nowait()
+            results = None
+            while not radar_receive_queue.empty():
+                results = radar_receive_queue.get()
+            if results is not None:
                 if results.shape != (4, 1024, 512, 2):
                     continue
                 intensity_images = convert_to_intensity_image(complex_result=results)
@@ -277,7 +279,7 @@ def create_radar_result():
                 else:
                     for idx, q in enumerate(radar_result_queues):
                         q.put(create_frame(frames[idx]))
-            except queue.Empty:
+            else:
                 time.sleep(0.001)
 
         elif not GlobalState.use_hw():
