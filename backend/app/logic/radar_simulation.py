@@ -268,7 +268,9 @@ def create_radar_result():
 
         elif GlobalState.use_hw():
             results = None
-            while not radar_receive_queue.empty():
+            for _ in range(radar_receive_queue.qsize() // 2):
+                _ = radar_receive_queue.get()
+            if not radar_receive_queue.empty():
                 results = radar_receive_queue.get()
             if results is not None:
                 if results.shape != (4, 1024, 512, 2):
