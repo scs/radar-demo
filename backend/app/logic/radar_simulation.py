@@ -89,7 +89,7 @@ def stop_threads(idx: int) -> None:
         mutex_lock.release()
 
 
-def gen_frames(idx: int) -> Generator[Any, Any, Any]:
+def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]
     while GlobalState.get_current_model() not in [
         Model.SHORT_RANGE.value,
         Model.QUAD_CORNER.value,
@@ -99,7 +99,6 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
 
     stop_producer.clear()
     start_threads(idx)
-    timer = Timer("gen_frames")
 
     counter = 0
     while GlobalState.get_current_model() in [Model.SHORT_RANGE.value, Model.QUAD_CORNER.value, Model.IMAGING.value]:
@@ -107,8 +106,6 @@ def gen_frames(idx: int) -> Generator[Any, Any, Any]:
         try:
             frame = radar_result_queues[idx].get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
-            duration = timer.duration()
-            range_doppler_info.fps = int(1 / duration)
         except queue.Empty:
             time.sleep(0.001)
             continue
@@ -145,7 +142,7 @@ def send_radar_scene():
                         mode[GlobalState.get_current_model() or Model.SHORT_RANGE.value], current_send_step(), 0
                     ):
                         timer.log_time()
-                        radar_send_queue.put(1)
+                        radar_send_queue.put(0)
                 else:
                     time.sleep(0.016)  # queue max size * intended frame rate
             else:
@@ -175,11 +172,14 @@ def receive_radar_result() -> None:
 
 
 def receive_radar_result_loop():
+    timer = Timer(name="receive loop")
     while producer.is_alive():
         if GlobalState.use_hw():
             try:
                 _ = radar_send_queue.get_nowait()
                 receive_radar_result()
+                duration = timer.duration()
+                range_doppler_info.fps = int(1 / duration)
             except queue.Empty:
                 time.sleep(0.001)
                 pass

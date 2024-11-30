@@ -149,8 +149,9 @@ class RangeDopplerInfo(HwInfo):
     num_aie_used: int = 2
 
     def aie_usage(self, settings: Settings) -> list[float]:  # pyright: ignore [reportImplicitOverride]
-        doppler_max_fft_per_sec = 1 / 0.0000008
-        range_max_fft_per_sec = 1 / 0.0000016
+
+        doppler_max_fft_per_sec = 1 / 0.0000017
+        range_max_fft_per_sec = 1 / 0.00000085
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         if device == ComputePlatform.PC_EMULATION.value:
