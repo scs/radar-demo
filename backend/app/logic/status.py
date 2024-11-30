@@ -71,16 +71,8 @@ class HwInfo(ABC):
         else:
             return f"{self.temperature:.1f} °C"
 
-    def number_of_aie_used(self, settings: Settings) -> str:
-        device = settings.get_device()
-        available_aies = get_number_of_ai_elements(device)
-        if available_aies > 0:
-            return f"{self.num_aie_used}/{available_aies}"
-        else:
-            return "-"
-
     @abstractmethod
-    def aie_load_percent(self, settings: Settings) -> str | None: ...
+    def aie_usage(self, settings: Settings) -> list[float]: ...
 
     @abstractmethod
     def fft_per_sec(self, settings: Settings) -> str: ...
@@ -92,37 +84,41 @@ class HwInfo(ABC):
             return str(value)
 
     def get_info(self, settings: Settings):
-        data: list[dict[str, str]] = [
+        data: list[dict[str, str | list[float]]] = [
             {
                 "label": "FPS",
                 "value": f"{self.int2str(self.fps)} fps",
             },
             {"label": "Power", "value": f"{self.watt}"},
             {"label": "Temp", "value": f"{self.temp}"},
-            {
-                "label": "AIE used",
-                "value": f"{self.number_of_aie_used(settings)}",
-            },
-            {"label": "AIE utilisation", "value": f"{self.aie_load_percent(settings)}"},
+            {"label": "AIE", "value": self.aie_usage(settings)},
             {"label": "FFT/sec", "value": self.fft_per_sec(settings)},
         ]
 
         return data
+
+    def format_load(self, load: float) -> str:
+        retval_format = '"{' + f"load:.{int(max(1+math.log10(1/load), 0))}f" + '}%"'
+        retval: str = eval(f"f{retval_format}")
+        return retval
 
 
 @dataclass
 class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
 
-    def aie_load_percent(self, settings: Settings) -> str | None:  # pyright: ignore [reportImplicitOverride]
+    def aie_usage(self, settings: Settings) -> list[float]:  # pyright: ignore [reportImplicitOverride]
+        device = settings.get_device()
+        available_aies = get_number_of_ai_elements(device)
         map_min_time = {
             512: 0.0000008,
             1024: 0.0000016,
         }
 
         device = settings.get_device()
+        retval = [0.0] * available_aies
         if device == ComputePlatform.PC_EMULATION.value:
-            return "-"
+            return [50, 50, 50]
         else:
             option = int(settings.get_selected_option(SettingLabel.RANGE_FFT) or 0)
             load = -1
@@ -131,17 +127,11 @@ class Fft1DInfo(HwInfo):
                 fps = np.mean(self.frame_rate)
                 batch_size = GlobalState.get_current_batch_size()
                 load = min_time * fps * batch_size * 100
+                retval[0] = float(load)
 
-            if load == -1:
-                retval = "nil"
-            else:
-                if load == 0:
-                    return "-"
-                retval_format = '"{' + f"load:.{int(max(1+math.log10(1/load), 0))}f" + '}%"'
-                retval = eval(f"f{retval_format}")  # pyright: ignore [reportAny]
             return retval
 
-    def fft_per_sec_int(self, settings: Settings) -> int:
+    def fft_per_sec_int(self, settings: Settings) -> int:  # pyright: ignore [reportUnusedParameter]
         batch_size = GlobalState.get_current_batch_size()
         mean = np.mean(self.frame_rate)
         return int(batch_size * mean)
@@ -158,34 +148,38 @@ class Fft1DInfo(HwInfo):
 class RangeDopplerInfo(HwInfo):
     num_aie_used: int = 2
 
-    def aie_load_percent(self, settings: Settings) -> str | None:  # pyright: ignore [reportImplicitOverride]
-        max_fft_per_sec = 1 / 0.0000008 + 1 / 0.0000016
+    def aie_usage(self, settings: Settings) -> list[float]:  # pyright: ignore [reportImplicitOverride]
+        doppler_max_fft_per_sec = 1 / 0.0000008
+        range_max_fft_per_sec = 1 / 0.0000016
         device = settings.get_device()
+        available_aies = get_number_of_ai_elements(device)
         if device == ComputePlatform.PC_EMULATION.value:
-            return "-"
+            load = [50.0, 50.0, 50.0]
         else:
-            load = -1
-            load = self.fft_per_sec_int(settings) / max_fft_per_sec * 100
+            load = [0.0] * available_aies
+            load[0] = self.range_fft_per_sec_int(settings) / range_max_fft_per_sec * 100
+            load[1] = self.doppler_fft_per_sec_int(settings) / doppler_max_fft_per_sec * 100
+        return load
 
-            if load == -1:
-                retval = "nil"
-            else:
-                if load == 0:
-                    return "-"
-                retval_format = '"{' + f"load:.{int(max(1+math.log10(1/load), 0))}f" + '}%"'
-                retval = eval(f"f{retval_format}")  # pyright: ignore [reportAny]
-            return retval
-
-    def fft_per_sec_int(self, settings: Settings) -> int:
-        range_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
-        doppler_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
-        range_size = int(range_config)
-        doppler_size = int(doppler_config)
+    def generic_fft_per_sec_int(self, fft_size: int) -> int:
         mean = np.mean(self.frame_rate)
         channels = 16
         if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
             channels /= 4
-        return int(channels * (range_size + doppler_size) * mean)
+        return int(channels * fft_size * mean)
+
+    def range_fft_per_sec_int(self, settings: Settings) -> int:
+        range_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
+        range_size = int(range_config)
+        return self.generic_fft_per_sec_int(range_size)
+
+    def doppler_fft_per_sec_int(self, settings: Settings) -> int:
+        doppler_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
+        doppler_size = int(doppler_config)
+        return self.generic_fft_per_sec_int(doppler_size)
+
+    def fft_per_sec_int(self, settings: Settings) -> int:
+        return self.range_fft_per_sec_int(settings) + self.doppler_fft_per_sec_int(settings)
 
     def fft_per_sec(self, settings: Settings) -> str:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
