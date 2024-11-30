@@ -128,6 +128,7 @@ def current_send_step() -> int:
         (current_steps[3] + radar_send_queue.qsize() + radar_receive_queue.qsize() + radar_result_queues[0].qsize())
         % STATIC_CONFIG.number_of_steps_in_period[3]
     )
+    send_step = int(current_steps[3])
     return int(send_step)
 
 
