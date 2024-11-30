@@ -138,11 +138,10 @@ def send_radar_scene():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 if not radar_send_queue.full():
-                    if send_scene(
-                        mode[GlobalState.get_current_model() or Model.SHORT_RANGE.value], current_send_step(), 0
-                    ):
+                    send_step = current_send_step()
+                    if send_scene(mode[GlobalState.get_current_model() or Model.SHORT_RANGE.value], send_step, 0):
                         timer.log_time()
-                        radar_send_queue.put(0)
+                        radar_send_queue.put(send_step)
                 else:
                     time.sleep(0.016)  # queue max size * intended frame rate
             else:
@@ -154,7 +153,7 @@ def send_radar_scene():
     logger.info("Stopping sender thread")
 
 
-def receive_radar_result() -> None:
+def receive_radar_result(drop: bool) -> None:
     complex_result = np.empty((4, 1024, 512, 2), np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
@@ -165,19 +164,24 @@ def receive_radar_result() -> None:
             0,
         )
     timer.log_time()
-    if err != 0:
-        radar_receive_queue.put(np.zeros((4, 1024, 512)).astype(np.int16))
+    if drop:
+        return
     else:
-        radar_receive_queue.put(complex_result)
+        if err != 0:
+            radar_receive_queue.put(np.zeros((4, 1024, 512)).astype(np.int16))
+        else:
+            radar_receive_queue.put(complex_result)
 
 
 def receive_radar_result_loop():
     timer = Timer(name="receive loop")
+    previous_step = -1
     while producer.is_alive():
         if GlobalState.use_hw():
             try:
-                _ = radar_send_queue.get_nowait()
-                receive_radar_result()
+                send_step = radar_send_queue.get_nowait()
+                receive_radar_result(send_step == previous_step)
+                previous_step = send_step
                 duration = timer.duration()
                 range_doppler_info.fps = int(1 / duration)
             except queue.Empty:
@@ -189,7 +193,7 @@ def receive_radar_result_loop():
     # clean up hw buffers
     while not radar_send_queue.empty():
         _ = radar_send_queue.get()
-        _ = receive_radar_result()
+        _ = receive_radar_result(True)
 
     logger.info("Stopping receiver thread")
 
