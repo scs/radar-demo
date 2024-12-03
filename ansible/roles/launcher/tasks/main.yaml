@@ -13,8 +13,10 @@
       cd /
       cd {{ playbook_dir }}/../backend || exit 1
       python3 run.py &
+      server_pid=$!
       sleep 10
-      chromium-browser --ozone-platform=wayland --app=http://127.0.0.1:5000 --start-fullscreen
+      chromium-browser --app=http://127.0.0.1:5000 --start-fullscreen
+      kill $server_pid
     dest: ~/start_demo.sh
     mode: '0755'
 - name: Place the icon in $HOME/.local/share
