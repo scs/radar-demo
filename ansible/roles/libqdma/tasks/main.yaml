@@ -5,6 +5,11 @@
     dest: /tmp/dma_ip_drivers
     depth: 1
   register: libqdma
+- name: Apply patch for newest kernel
+  become: false
+  ansible.builtin.command:
+    cmd: git apply {{ playbook_dir}}/roles/libqdma/files/0001-QDMA-Add-support-for-6.4.x-kernel-version.patch
+    chdir: /tmp/dma_ip_drivers
 - name: Install build dependencies
   become: true
   ansible.builtin.package:
