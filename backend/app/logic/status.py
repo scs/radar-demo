@@ -92,10 +92,10 @@ class HwInfo(ABC):
             },
             {"label": "Power", "value": f"{self.watt}"},
             {"label": "Temp", "value": f"{self.temp}"},
-            {"label": "AIE", "value": self.aie_usage(settings)},
             {"label": "FFT/sec", "value": self.fft_per_sec(settings)},
         ]
-
+        if settings.get_device() != ComputePlatform.PC_EMULATION.value:
+            data.append({"label": "AIE", "value": self.aie_usage(settings)})
         return data
 
     def format_load(self, load: float) -> str:
@@ -127,7 +127,7 @@ class Fft1DInfo(HwInfo):
         device = settings.get_device()
         retval = [0.0] * available_aies
         if device == ComputePlatform.PC_EMULATION.value:
-            return [50, 50, 50]
+            return []
         else:
             option = int(settings.get_selected_option(SettingLabel.RANGE_FFT) or 0)
             load = -1
@@ -166,7 +166,7 @@ class RangeDopplerInfo(HwInfo):
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         if device == ComputePlatform.PC_EMULATION.value:
-            load = [50.0, 50.0, 50.0]
+            load = []
         else:
             load = [0.0] * available_aies
             load[0] = self.range_fft_per_sec_int(settings) / range_max_fft_per_sec * 100
