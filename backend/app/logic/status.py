@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import override
 
 import numpy as np
 from flask import Response, jsonify
