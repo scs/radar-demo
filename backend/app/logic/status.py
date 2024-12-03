@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import override
 
 import numpy as np
 from flask import Response, jsonify
@@ -107,6 +108,14 @@ class HwInfo(ABC):
 class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
 
+    def reset(self):
+        self.frame_rate: NDArray[np.int32] = np.zeros(WIN_SIZE).astype(np.int32)
+        self.power: float = 0
+        self.ffts_emulation: int = 0
+
+    def set_ffts_emulation(self, value: int):
+        self.ffts_emulation = value
+
     def aie_usage(self, settings: Settings) -> list[float]:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
@@ -131,7 +140,9 @@ class Fft1DInfo(HwInfo):
 
             return retval
 
-    def fft_per_sec_int(self, settings: Settings) -> int:  # pyright: ignore [reportUnusedParameter]
+    def fft_per_sec_int(self, settings: Settings) -> int:
+        if settings.get_device() == ComputePlatform.PC_EMULATION.value:
+            return self.ffts_emulation
         batch_size = GlobalState.get_current_batch_size()
         mean = np.mean(self.frame_rate)
         return int(batch_size * mean)
@@ -139,7 +150,7 @@ class Fft1DInfo(HwInfo):
     def fft_per_sec(self, settings: Settings) -> str:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
         if device == ComputePlatform.PC_EMULATION.value:
-            return str(self.fps)
+            return str(self.ffts_emulation)
         else:
             return f"{self.fft_per_sec_int(settings):,}"
 
