@@ -7,6 +7,7 @@
     repo_dir: "{{ playbook_dir | dirname }}"
   roles:
     - role: distupgrade
+    - role: git
     - role: bash
     - role: sshd
     - role: launcher
@@ -29,4 +30,5 @@
           - curl
           - htop
           - git
+          - vim
         state: present

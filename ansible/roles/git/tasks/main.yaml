@@ -1,0 +1,2 @@
+- name: Add git rebase config
+  ansible.builtin.shell: "git config pull.rebase true"
