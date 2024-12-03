@@ -140,7 +140,7 @@ def receive_data():
                 _ = send_queue.get_nowait()
                 receive_result()
                 duration = timer.duration()
-                benchmark_info.fps = int(1 / duration)
+                # benchmark_info.fps = int(1 / duration)
             except queue.Empty:
                 time.sleep(0.001)
                 pass
