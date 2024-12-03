@@ -124,10 +124,6 @@ def send_scene(mode: int, step: int, emulation: int) -> bool:
 def current_send_step() -> int:
     current_steps = GlobalState.get_current_steps()
     # The model in the app and the generation of the radar data are 180° phase shifted
-    send_step = int(
-        (current_steps[3] + radar_send_queue.qsize() + radar_receive_queue.qsize() + radar_result_queues[0].qsize())
-        % STATIC_CONFIG.number_of_steps_in_period[3]
-    )
     send_step = int(current_steps[3])
     return int(send_step)
 
@@ -154,7 +150,7 @@ def send_radar_scene():
     logger.info("Stopping sender thread")
 
 
-def receive_radar_result(drop: bool) -> None:
+def receive_radar_result() -> NDArray[np.int16]:
     complex_result = np.empty((4, 1024, 512, 2), np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
@@ -165,13 +161,7 @@ def receive_radar_result(drop: bool) -> None:
             0,
         )
     timer.log_time()
-    if drop:
-        return
-    else:
-        if err != 0:
-            radar_receive_queue.put(np.zeros((4, 1024, 512)).astype(np.int16))
-        else:
-            radar_receive_queue.put(complex_result)
+    return complex_result if err == 0 else np.zeros((4, 1024, 512)).astype(np.int16)
 
 
 def receive_radar_result_loop():
@@ -181,20 +171,20 @@ def receive_radar_result_loop():
         if GlobalState.use_hw():
             try:
                 send_step = radar_send_queue.get_nowait()
-                receive_radar_result(send_step == previous_step)
+                complex_result = receive_radar_result()
+                if send_step != previous_step:
+                    radar_receive_queue.put(complex_result)
                 previous_step = send_step
-                duration = timer.duration()
-                range_doppler_info.fps = int(1 / duration)
+                range_doppler_info.fps = int(1 / timer.duration())
             except queue.Empty:
                 time.sleep(0.001)
-                pass
         else:
             time.sleep(0.1)
 
     # clean up hw buffers
     while not radar_send_queue.empty():
         _ = radar_send_queue.get()
-        _ = receive_radar_result(True)
+        _ = receive_radar_result()
 
     logger.info("Stopping receiver thread")
 
@@ -275,6 +265,9 @@ def create_radar_result():
                 results = radar_receive_queue.get()
             if results is not None:
                 if results.shape != (4, 1024, 512, 2):
+                    logger.error(
+                        f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {results.shape}"
+                    )
                     continue
                 intensity_images = convert_to_intensity_image(complex_result=results)
                 frames: list[NDArray[np.uint8]] = []
