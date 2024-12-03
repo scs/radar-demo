@@ -1,8 +1,8 @@
 - name: Setup Radar Demo
   hosts: dev
   vars:
-    kernel_base: "6.2.0"
-    kernel_patch: "39"
+    kernel_base: "6.8.0"
+    kernel_patch: "49"
     kernel: "{{ kernel_base }}-{{ kernel_patch }}"
     repo_dir: "{{ playbook_dir | dirname }}"
   roles:
