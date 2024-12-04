@@ -72,7 +72,7 @@ class HwInfo(ABC):
             return f"{self.temperature:.1f} °C"
 
     @abstractmethod
-    def aie_usage(self, settings: Settings) -> list[float]: ...
+    def aie_usage(self, settings: Settings) -> list[int]: ...
 
     @abstractmethod
     def fft_per_sec(self, settings: Settings) -> str: ...
@@ -84,11 +84,7 @@ class HwInfo(ABC):
             return str(value)
 
     def get_info(self, settings: Settings):
-        data: list[dict[str, str | list[float]]] = [
-            {
-                "label": "FPS",
-                "value": f"{self.int2str(self.fps)} fps",
-            },
+        data: list[dict[str, str | list[int]]] = [
             {"label": "Power", "value": f"{self.watt}"},
             {"label": "Temp", "value": f"{self.temp}"},
             {"label": "FFT/sec", "value": self.fft_per_sec(settings)},
@@ -107,15 +103,16 @@ class HwInfo(ABC):
 class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
 
-    def reset(self):
+    def reset(self):  # pyright: ignore [reportImplicitOverride]
         self.frame_rate: NDArray[np.int32] = np.zeros(WIN_SIZE).astype(np.int32)
         self.power: float = 0
-        self.ffts_emulation: int = 0
+        self.ffts_emulation: NDArray[np.int32] = np.zeros(200).astype(np.int32)
 
     def set_ffts_emulation(self, value: int):
-        self.ffts_emulation = value
+        self.ffts_emulation = np.append(self.ffts_emulation, value)
+        self.ffts_emulation = np.delete(self.ffts_emulation, 0)
 
-    def aie_usage(self, settings: Settings) -> list[float]:  # pyright: ignore [reportImplicitOverride]
+    def aie_usage(self, settings: Settings) -> list[int]:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         map_min_time = {
@@ -124,7 +121,7 @@ class Fft1DInfo(HwInfo):
         }
 
         device = settings.get_device()
-        retval = [0.0] * available_aies
+        retval = [0] * available_aies
         if device == ComputePlatform.PC_EMULATION.value:
             return []
         else:
@@ -135,13 +132,13 @@ class Fft1DInfo(HwInfo):
                 fps = np.mean(self.frame_rate)
                 batch_size = GlobalState.get_current_batch_size()
                 load = min_time * fps * batch_size * 100
-                retval[0] = float(load)
+                retval[0] = min(int(load), 100)
 
             return retval
 
     def fft_per_sec_int(self, settings: Settings) -> int:
         if settings.get_device() == ComputePlatform.PC_EMULATION.value:
-            return self.ffts_emulation
+            return int(np.mean(self.ffts_emulation))
         batch_size = GlobalState.get_current_batch_size()
         mean = np.mean(self.frame_rate)
         return int(batch_size * mean)
@@ -158,18 +155,18 @@ class Fft1DInfo(HwInfo):
 class RangeDopplerInfo(HwInfo):
     num_aie_used: int = 2
 
-    def aie_usage(self, settings: Settings) -> list[float]:  # pyright: ignore [reportImplicitOverride]
+    def aie_usage(self, settings: Settings) -> list[int]:  # pyright: ignore [reportImplicitOverride]
 
-        doppler_max_fft_per_sec = 1 / 0.0000017
-        range_max_fft_per_sec = 1 / 0.00000085
+        doppler_max_fft_per_sec = 1 / 0.0000018
+        range_max_fft_per_sec = 1 / 0.0000009
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         if device == ComputePlatform.PC_EMULATION.value:
             load = []
         else:
-            load = [0.0] * available_aies
-            load[0] = self.range_fft_per_sec_int(settings) / range_max_fft_per_sec * 100
-            load[1] = self.doppler_fft_per_sec_int(settings) / doppler_max_fft_per_sec * 100
+            load = [0] * available_aies
+            load[0] = min(int(self.range_fft_per_sec_int(settings) / range_max_fft_per_sec * 100), 100)
+            load[1] = min(int(self.doppler_fft_per_sec_int(settings) / doppler_max_fft_per_sec * 100), 100)
         return load
 
     def generic_fft_per_sec_int(self, fft_size: int) -> int:
@@ -198,6 +195,18 @@ class RangeDopplerInfo(HwInfo):
             return "-"
         else:
             return f"{self.fft_per_sec_int(settings):,}"
+
+    def get_info(  # pyright: ignore [reportImplicitOverride]
+        self, settings: Settings
+    ) -> list[dict[str, str | list[int]]]:
+        data = super().get_info(settings)
+        data.append(
+            {
+                "label": "FPS",
+                "value": f"{self.int2str(self.fps)} fps",
+            }
+        )
+        return data
 
 
 benchmark_info = Fft1DInfo()
