@@ -72,7 +72,7 @@ def get_current_signal(samples: int, amplitude: int) -> NDArray[np.int32]:
     return signal
 
 
-def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np.signedinteger[Any]], float]:
+def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np.int32], float]:
     x = np.arange(0, samples)
     signal = get_current_signal(samples, amplitude)
     fft_data = np.fft.fft(signal, samples, norm="forward")
@@ -140,7 +140,7 @@ def receive_data():
                 _ = send_queue.get_nowait()
                 receive_result()
                 duration = timer.duration()
-                # benchmark_info.fps = int(1 / duration)
+                benchmark_info.fps = int(1 / duration)
             except queue.Empty:
                 time.sleep(0.001)
                 pass
@@ -160,7 +160,7 @@ def convert_data():
                 plot_timer = Timer(name="Plot")
                 real = fft_data[..., 0].astype(float)
                 imag = fft_data[..., 1].astype(float)
-                amp = np.sqrt(real**2 + imag**2)
+                amp = np.sqrt(real**2 + imag**2)  # pyright: ignore [reportUnknownArgumentType]
                 amp = amp / np.max(amp)
                 plot_timer.log_time()
                 result_queue.put(amp)
@@ -218,7 +218,7 @@ def flush_queues() -> None:
         _ = result_queue.get()
 
 
-def gen_frames() -> Generator[Any, Any, Any]:
+def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
     fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
     start_threads()
     loop_timer = Timer("benchmark")
@@ -234,7 +234,7 @@ def gen_frames() -> Generator[Any, Any, Any]:
             try:
                 fft_data = result_queue.get_nowait()
                 fft_data *= maxval
-                line.set_data(x, np.abs(fft_data))
+                line.set_data(x, np.abs(fft_data))  # pyright: ignore  [reportUnknownArgumentType]
 
                 buf = BytesIO()
                 fig.savefig(buf, format="JPEG")
