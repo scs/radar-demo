@@ -33,6 +33,7 @@ mutex_lock = threading.Lock()
 AMPLITUDE = 32
 SAMPLES = 512
 SCALE = SAMPLES * AMPLITUDE
+count = 0
 
 
 def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_size: int) -> int:
@@ -133,6 +134,7 @@ def receive_result():
 
 
 def receive_data():
+    global count
     timer = Timer(name="receive loop")
     while sender.is_alive():
         if GlobalState.use_hw():
@@ -140,7 +142,7 @@ def receive_data():
                 _ = send_queue.get_nowait()
                 receive_result()
                 duration = timer.duration()
-                benchmark_info.fps = int(1 / duration)
+                count = count + 1
             except queue.Empty:
                 time.sleep(0.001)
                 pass
@@ -222,6 +224,7 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
     fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
     start_threads()
     loop_timer = Timer("benchmark")
+    count_bak = count
     while GlobalState.get_current_model() == Model.ONE_D_FFT.value:
 
         if GlobalState.is_stopped():
@@ -241,7 +244,10 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
 
                 frame = buf.getbuffer()
                 yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
-                benchmark_info.fps = int(1 / loop_timer.duration())
+                count_current = count
+                benchmark_info.fps = int(1 / loop_timer.duration() * (count_current - count_bak))
+                count_bak = count_current
+
             except queue.Empty:
                 time.sleep(0.001)
                 continue
