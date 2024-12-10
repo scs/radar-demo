@@ -104,7 +104,7 @@ class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
 
     def reset(self):  # pyright: ignore [reportImplicitOverride]
-        self.frame_rate: NDArray[np.int32] = np.zeros(1000).astype(np.int32)
+        self.frame_rate: NDArray[np.int32] = np.zeros(100).astype(np.int32)
         self.power: float = 0
         self.ffts_emulation: NDArray[np.int32] = np.zeros(1000).astype(np.int32)
 
