@@ -47,9 +47,7 @@ class Selected:
         return {"type": self.type}
 
     def set_from_dict(self, sel: dict[str, str]) -> None:
-        print(f"dict to unpack = {sel}")
         for key, value in sel.items():
-            print(f"key: {key} value: {value}")
             match key:
                 case "type":
                     self.type = value
