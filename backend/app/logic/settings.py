@@ -64,6 +64,7 @@ class Setting:
     allOptions: list[str]
     selected: Selected
     id: int = 1
+    enabled: bool = True
 
     def to_dict(self):
         return {
@@ -102,7 +103,8 @@ class Settings:
         return result
 
     def to_dict(self):
-        return [setting.to_dict() for setting in self.settings]
+        self.check_settings()
+        return [setting.to_dict() for setting in self.settings if setting.enabled]
 
     def get_selected(self, label: SettingLabel) -> Selected | None:
         for setting in self.settings:
@@ -130,6 +132,23 @@ class Settings:
         if selected := self.get_selected(SettingLabel.BATCH_SIZE):
             return int(selected.type)
         return 1
+
+    def check_settings(self):
+        device = self.get_device()
+        if device == ComputePlatform.PC_EMULATION.value:
+            self.disable_batch_size()
+        else:
+            self.enable_batch_size()
+
+    def disable_batch_size(self) -> None:
+        for setting in self.settings:
+            if setting.label == SettingLabel.BATCH_SIZE:
+                setting.enabled = False
+
+    def enable_batch_size(self) -> None:
+        for setting in self.settings:
+            if setting.label == SettingLabel.BATCH_SIZE:
+                setting.enabled = True
 
 
 device_setting = Setting(
