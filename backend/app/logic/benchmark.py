@@ -8,6 +8,7 @@ from collections.abc import Generator
 from io import BytesIO
 from typing import Any
 
+import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
@@ -20,9 +21,21 @@ from app.logic.state import GlobalState
 from app.logic.status import benchmark_info
 from app.logic.timer import Timer
 
+matplotlib.use("agg")
+#######################################################################################################################
+# Module Global Variables
+#
+log_level = logging.NOTSET  # NOTSET, DEBUG, INFO, WARNING, ERROR
+
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-logger.info("radar demo app")
+logger_stream = logging.StreamHandler()
+logger_stream.setLevel(log_level)
+formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
+logger_stream.setFormatter(formatter)
+logger.setLevel(level=log_level)
+logger.info("benchmark demo app")
+logger.addHandler(logger_stream)
+logger.propagate = False
 
 result_queue = queue.Queue(maxsize=7)
 send_queue = queue.Queue(maxsize=7)
@@ -34,9 +47,12 @@ AMPLITUDE = 32
 SAMPLES = 512
 SCALE = SAMPLES * AMPLITUDE
 count = 0
+#
+#######################################################################################################################
 
 
 def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_size: int) -> int:
+    logger.debug("Entering")
     err = 1
     if STATIC_CONFIG.versal_lib:
         err: int = STATIC_CONFIG.versal_lib.send_1d_fft_data(
@@ -44,15 +60,19 @@ def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_siz
             data_size_in_bytes,
             batch_size,
         )
+    logger.debug("Leaving")
     return err
 
 
 def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
+    logger.debug("Entering")
     if STATIC_CONFIG.versal_lib:
         STATIC_CONFIG.versal_lib.receive_1d_fft_results(data.ctypes, size)
+    logger.debug("Leaving")
 
 
 def get_current_phase(samples: int) -> NDArray[np.float32]:
+    logger.debug("Entering")
     current_step = GlobalState.get_current_steps()[0]
     border = 20
     position: int = abs((STATIC_CONFIG.number_of_steps_in_period[0] / 2) - current_step)
@@ -63,17 +83,21 @@ def get_current_phase(samples: int) -> NDArray[np.float32]:
     )
     norm_value: int = STATIC_CONFIG.number_of_steps_in_period[0] + border
     phase = np.linspace(0 + border, samples, samples) * (2 * np.pi * (offseted_position / norm_value) * 2)
+    logger.debug("Leaving")
     return phase
 
 
 def get_current_signal(samples: int, amplitude: int) -> NDArray[np.int32]:
+    logger.debug("Entering")
     phase = get_current_phase(samples)
     rand_noise = np.random.normal(scale=0.15, size=samples)
     signal = np.exp(1.0j * (phase + rand_noise)) * amplitude
+    logger.debug("Leaving")
     return signal
 
 
 def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np.int32], float]:
+    logger.debug("Entering")
     x = np.arange(0, samples)
     signal = get_current_signal(samples, amplitude)
     fft_data = np.fft.fft(signal, samples, norm="forward")
@@ -84,17 +108,21 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
     [line] = ax.plot(x, absval)
     line.set_data(x, absval)
     _ = ax.axis("off")
+    logger.debug("Leaving")
     return (fig, line, x, np.max(absval))
 
 
 def reset_fifos() -> bool:
+    logger.debug("Entering")
     if STATIC_CONFIG.versal_lib:
         err = STATIC_CONFIG.versal_lib.reset_hw()
         return err == 0
+    logger.debug("Leaving")
     return True
 
 
 def send_data():
+    logger.debug("Entering")
     if GlobalState.has_hw():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
@@ -123,34 +151,36 @@ def send_data():
     else:
         while not stop_producer.is_set():
             time.sleep(0.1)
-
-    logger.info("Stopping sender thread")
+    logger.debug("Leaving")
 
 
 def receive_result():
+    logger.debug("Entering")
     fft_data = np.zeros((SAMPLES, 2)).astype(np.int16)
     receive_1d_fft_results(fft_data, 2 * SAMPLES * ctypes.sizeof(ctypes.c_int16))
     receive_queue.put(fft_data)
+    logger.debug("Leaving")
 
 
 def receive_data():
+    logger.debug("Entering")
     global count
-    timer = Timer(name="receive loop")
     while sender.is_alive():
         if GlobalState.use_hw():
             try:
                 _ = send_queue.get_nowait()
                 receive_result()
-                duration = timer.duration()
                 count = count + 1
             except queue.Empty:
                 time.sleep(0.001)
                 pass
         else:
             time.sleep(0.1)
+    logger.debug("Leaving")
 
 
 def convert_data():
+    logger.debug("Entering")
     while receiver.is_alive():
         if GlobalState.is_stopped():
             time.sleep(0.1)
@@ -176,17 +206,18 @@ def convert_data():
             fft_data = np.abs(fft_data) * SAMPLES
             fft_data = fft_data / np.max(fft_data)
             result_queue.put(fft_data)
+    logger.debug("Leaving")
 
 
 def start_threads() -> None:
-    logger.info("Starting Threads")
+    logger.debug("Entering")
     global sender
     global receiver
     global converter
-    logger.info("Wait for mutex")
+    logger.debug("Wait for mutex")
     locked = mutex_lock.acquire(timeout=0.1)
     if locked:
-        logger.info("Mutex aquired")
+        logger.debug("Mutex aquired")
         _ = reset_fifos()
         sender = threading.Thread(target=send_data, name="sender")
         sender.start()
@@ -194,21 +225,26 @@ def start_threads() -> None:
         receiver.start()
         converter = threading.Thread(target=convert_data, name="converter")
         converter.start()
+    else:
+        logger.debug("No Mutex aquired")
+    logger.debug("Leaving")
 
 
 def stop_threads() -> None:
-    logger.info("Stopping threads")
+    logger.debug("Entering")
     stop_producer.set()
     # converter only stops once producer and consumer is stopped so we only need to wait for the converter
     converter.join()
     flush_queues()
     benchmark_info.reset()
 
-    logger.info("Releasing mutex")
+    logger.debug("Releasing mutex")
     mutex_lock.release()
+    logger.debug("Leaving")
 
 
 def flush_queues() -> None:
+    logger.debug("Entering")
     while not send_queue.empty():
         _ = send_queue.get()
 
@@ -219,9 +255,13 @@ def flush_queues() -> None:
     while not result_queue.empty():
         _ = result_queue.get()
 
+    logger.debug("Leaving")
+
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
+    logger.debug("Entering")
     fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
+    stop_producer.clear()
     start_threads()
     loop_timer = Timer("benchmark")
     count_bak = count
@@ -251,5 +291,5 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
             except queue.Empty:
                 time.sleep(0.001)
                 continue
-    logger.info("Stopping Threads")
     stop_threads()
+    logger.debug("Leaving")
