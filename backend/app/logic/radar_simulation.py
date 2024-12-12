@@ -28,7 +28,6 @@ logger_stream.setLevel(logging.INFO)
 formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
 logger_stream.setFormatter(formatter)
 logger.setLevel(level=logging.NOTSET)
-logger.info("radar demo app")
 logger.addHandler(logger_stream)
 logger.propagate = False
 
@@ -50,15 +49,15 @@ def reset_fifos() -> bool:
 
 
 def start_threads(idx: int) -> None:
-    logger.info("Starting Threads")
+    logger.debug("Starting Threads")
     global producer
     global consumer
     global converter
     if idx == 0:
-        logger.info("Wait for mutex")
+        logger.debug("Wait for mutex")
         locked = mutex_lock.acquire(timeout=0.1)
         if locked:
-            logger.info("Mutex aquired")
+            logger.debug("Mutex aquired")
             _ = reset_fifos()
             producer = threading.Thread(target=send_radar_scene, name="producer")
             producer.start()
@@ -69,7 +68,7 @@ def start_threads(idx: int) -> None:
 
 
 def stop_threads(idx: int) -> None:
-    logger.info("Stopping threads")
+    logger.debug("Stopping threads")
     stop_producer.set()
     if idx == 0:
         # converter only stops once producer and consumer is stopped so we only need to wait for the converter
@@ -85,7 +84,7 @@ def stop_threads(idx: int) -> None:
 
         range_doppler_info.reset()
 
-        logger.info("Releasing mutex")
+        logger.debug("Releasing mutex")
         mutex_lock.release()
 
 
@@ -110,7 +109,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
             time.sleep(0.001)
             continue
 
-    logger.info(f"Stopping threads {GlobalState.get_current_model()}")
+    logger.debug(f"Stopping threads {GlobalState.get_current_model()}")
     stop_threads(idx)
 
 
@@ -147,7 +146,7 @@ def send_radar_scene():
         while not stop_producer.is_set():
             time.sleep(0.1)
 
-    logger.info("Stopping sender thread")
+    logger.debug("Stopping sender thread")
 
 
 def receive_radar_result() -> NDArray[np.int16]:
@@ -186,7 +185,7 @@ def receive_radar_result_loop():
         _ = radar_send_queue.get()
         _ = receive_radar_result()
 
-    logger.info("Stopping receiver thread")
+    logger.debug("Stopping receiver thread")
 
 
 def convert_to_intensity_image(complex_result: NDArray[np.int16]) -> NDArray[np.int32]:
@@ -300,5 +299,5 @@ def export_results(intensity_image: NDArray[np.int32], current_step: int, channe
         result_file_name = f"results/result_channel_{channel}_position_{int(current_step):04d}.bin"
         result_file_path = Path(result_file_name)
         if not result_file_path.is_file():
-            logger.info(f"writing to file {result_file_name}")
+            logger.debug(f"writing to file {result_file_name}")
             intensity_image.tofile(result_file_path)
