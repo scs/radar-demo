@@ -75,6 +75,9 @@ class HwInfo(ABC):
     def aie_usage(self, settings: Settings) -> list[int]: ...
 
     @abstractmethod
+    def fft_per_sec_int(self, settings: Settings) -> int: ...
+
+    @abstractmethod
     def fft_per_sec(self, settings: Settings) -> str: ...
 
     def int2str(self, value: int) -> str:
@@ -136,7 +139,7 @@ class Fft1DInfo(HwInfo):
 
             return retval
 
-    def fft_per_sec_int(self, settings: Settings) -> int:
+    def fft_per_sec_int(self, settings: Settings) -> int:  # pyright: ignore [reportImplicitOverride]
         if settings.get_device() == ComputePlatform.PC_EMULATION.value:
             return int(np.mean(self.ffts_emulation))
         batch_size = GlobalState.get_current_batch_size()
@@ -186,7 +189,7 @@ class RangeDopplerInfo(HwInfo):
         doppler_size = int(doppler_config)
         return self.generic_fft_per_sec_int(doppler_size)
 
-    def fft_per_sec_int(self, settings: Settings) -> int:
+    def fft_per_sec_int(self, settings: Settings) -> int:  # pyright: ignore [reportImplicitOverride]
         return self.range_fft_per_sec_int(settings) + self.doppler_fft_per_sec_int(settings)
 
     def fft_per_sec(self, settings: Settings) -> str:  # pyright: ignore [reportImplicitOverride]
