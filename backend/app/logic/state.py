@@ -56,6 +56,8 @@ class GlobalState:
         cls.settings = benchmark_settings if model == Model.ONE_D_FFT.value else radar_settings
         if STATIC_CONFIG.versal_lib:
             cls.settings.set_device(ComputePlatform.VE2302)
+        else:
+            cls.settings.disable_hw()
 
         cls.runningState = RunningState.STOPPED
         cls.model = model

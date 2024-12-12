@@ -24,9 +24,16 @@ def get_number_of_ai_elements(device: str) -> int:
 class ValueMap:
     label: str
     availableOptions: list[str]
+    enabled: bool = True
 
     def to_dict(self):
-        return {"label": self.label, "availableOptions": self.availableOptions}
+        return {"label": self.label, "availableOptions": self.availableOptions, "enabled": self.enabled}
+
+    def disable(self) -> None:
+        self.enabled = False
+
+    def enable(self) -> None:
+        self.enabled = True
 
 
 class SettingLabel(Enum):
@@ -149,6 +156,13 @@ class Settings:
         for setting in self.settings:
             if setting.label == SettingLabel.BATCH_SIZE:
                 setting.enabled = True
+
+    def disable_hw(self) -> None:
+        for setting in self.settings:
+            if setting.label == SettingLabel.DEVICE:
+                for value in setting.valueMap:
+                    if value.label in [ComputePlatform.VE2302.value, ComputePlatform.VE2102.value]:
+                        value.disable()
 
 
 device_setting = Setting(
