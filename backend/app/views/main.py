@@ -64,6 +64,12 @@ def init_new_model():
     return jsonify(GlobalState.get_current_state())
 
 
+@app.route("/initApp", methods=["GET"])
+def init_app():
+    GlobalState.init_state(None)
+    return "", 200
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
