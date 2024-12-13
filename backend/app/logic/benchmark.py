@@ -22,53 +22,6 @@ from app.logic.status import benchmark_info
 from app.logic.timer import Timer
 
 matplotlib.use("agg")
-#######################################################################################################################
-# Module Global Variables
-#
-log_level = logging.NOTSET  # NOTSET, DEBUG, INFO, WARNING, ERROR
-
-logger = logging.getLogger(__name__)
-logger_stream = logging.StreamHandler()
-logger_stream.setLevel(log_level)
-formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
-logger_stream.setFormatter(formatter)
-logger.setLevel(level=log_level)
-logger.info("benchmark demo app")
-logger.addHandler(logger_stream)
-logger.propagate = False
-
-result_queue = queue.Queue(maxsize=7)
-send_queue = queue.Queue(maxsize=7)
-receive_queue = queue.Queue(maxsize=7)
-stop_producer = threading.Event()
-mutex_lock = threading.Lock()
-
-AMPLITUDE = 32
-SAMPLES = 512
-SCALE = SAMPLES * AMPLITUDE
-count = 0
-#
-#######################################################################################################################
-
-
-def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_size: int) -> int:
-    logger.debug("Entering")
-    err = 1
-    if STATIC_CONFIG.versal_lib:
-        err: int = STATIC_CONFIG.versal_lib.send_1d_fft_data(
-            data.ctypes,
-            data_size_in_bytes,
-            batch_size,
-        )
-    logger.debug("Leaving")
-    return err
-
-
-def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
-    logger.debug("Entering")
-    if STATIC_CONFIG.versal_lib:
-        STATIC_CONFIG.versal_lib.receive_1d_fft_results(data.ctypes, size)
-    logger.debug("Leaving")
 
 
 def get_current_phase(samples: int) -> NDArray[np.float32]:
@@ -110,6 +63,57 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
     _ = ax.axis("off")
     logger.debug("Leaving")
     return (fig, line, x, np.max(absval))
+
+
+#######################################################################################################################
+# Module Global Variables
+#
+
+log_level = logging.NOTSET  # NOTSET, DEBUG, INFO, WARNING, ERROR
+
+logger = logging.getLogger(__name__)
+logger_stream = logging.StreamHandler()
+logger_stream.setLevel(log_level)
+formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
+logger_stream.setFormatter(formatter)
+logger.setLevel(level=log_level)
+logger.info("benchmark demo app")
+logger.addHandler(logger_stream)
+logger.propagate = False
+
+result_queue = queue.Queue(maxsize=7)
+send_queue = queue.Queue(maxsize=7)
+receive_queue = queue.Queue(maxsize=7)
+stop_producer = threading.Event()
+mutex_lock = threading.Lock()
+
+AMPLITUDE = 32
+SAMPLES = 512
+SCALE = SAMPLES * AMPLITUDE
+count = 0
+fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
+#
+#######################################################################################################################
+
+
+def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_size: int) -> int:
+    logger.debug("Entering")
+    err = 1
+    if STATIC_CONFIG.versal_lib:
+        err: int = STATIC_CONFIG.versal_lib.send_1d_fft_data(
+            data.ctypes,
+            data_size_in_bytes,
+            batch_size,
+        )
+    logger.debug("Leaving")
+    return err
+
+
+def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
+    logger.debug("Entering")
+    if STATIC_CONFIG.versal_lib:
+        STATIC_CONFIG.versal_lib.receive_1d_fft_results(data.ctypes, size)
+    logger.debug("Leaving")
 
 
 def reset_fifos() -> bool:
@@ -179,33 +183,61 @@ def receive_data():
     logger.debug("Leaving")
 
 
+def create_frame(fft_data: NDArray[np.float32]):
+    fft_data *= maxval
+    line.set_data(x, np.abs(fft_data))
+
+    buf = BytesIO()
+    fig.savefig(buf, format="JPEG")
+
+    frame = buf.getbuffer()
+    return frame
+
+
+def hw_stream():
+    while receiver.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
+        fft_data = None
+        while not receive_queue.empty():
+            fft_data = receive_queue.get()
+        if fft_data is not None:
+            plot_timer = Timer(name="Plot")
+            real = fft_data[..., 0].astype(float)
+            imag = fft_data[..., 1].astype(float)
+            amp = np.sqrt(real**2 + imag**2)  # pyright: ignore [reportUnknownArgumentType]
+            amp = amp / np.max(amp)
+            plot_timer.log_time()
+            result_queue.put(create_frame(amp))
+
+
+def sw_stream():
+    while receiver.is_alive() and not GlobalState.is_stopped() and not GlobalState.use_hw():
+        signal_timer = Timer(name="signal generation")
+        signal = get_current_signal(SAMPLES, AMPLITUDE)
+        signal_timer.log_time()
+        fft_timer = Timer("NP fft timer")
+        fft_data = np.fft.fft(signal, SAMPLES, norm="forward")
+        benchmark_info.set_ffts_emulation(int(1 / fft_timer.duration()))
+        fft_data = np.abs(fft_data) * SAMPLES
+        fft_data = fft_data / np.max(fft_data)
+        result_queue.put(create_frame(fft_data))
+
+
+def stopped_stream():
+    while receiver.is_alive() and GlobalState.is_stopped():
+        flush_queues()
+        benchmark_info.reset()
+        frame = STATIC_CONFIG.stopped_buf
+        result_queue.put(frame)
+        time.sleep(0.04)
+
+
 def convert_data():
     logger.debug("Entering")
     while receiver.is_alive():
-        if GlobalState.is_stopped():
-            time.sleep(0.1)
-        elif GlobalState.use_hw():
-            fft_data = None
-            while not receive_queue.empty():
-                fft_data = receive_queue.get()
-            if fft_data is not None:
-                plot_timer = Timer(name="Plot")
-                real = fft_data[..., 0].astype(float)
-                imag = fft_data[..., 1].astype(float)
-                amp = np.sqrt(real**2 + imag**2)  # pyright: ignore [reportUnknownArgumentType]
-                amp = amp / np.max(amp)
-                plot_timer.log_time()
-                result_queue.put(amp)
-        else:
-            signal_timer = Timer(name="signal generation")
-            signal = get_current_signal(SAMPLES, AMPLITUDE)
-            signal_timer.log_time()
-            fft_timer = Timer("NP fft timer")
-            fft_data = np.fft.fft(signal, SAMPLES, norm="forward")
-            benchmark_info.set_ffts_emulation(int(1 / fft_timer.duration()))
-            fft_data = np.abs(fft_data) * SAMPLES
-            fft_data = fft_data / np.max(fft_data)
-            result_queue.put(fft_data)
+        hw_stream()
+        sw_stream()
+        stopped_stream()
+
     logger.debug("Leaving")
 
 
@@ -260,36 +292,24 @@ def flush_queues() -> None:
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
     logger.debug("Entering")
-    fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
     stop_producer.clear()
     start_threads()
     loop_timer = Timer("benchmark")
     count_bak = count
+
     while GlobalState.get_current_model() == Model.ONE_D_FFT.value:
-
-        if GlobalState.is_stopped():
-            flush_queues()
-            benchmark_info.reset()
-            frame = STATIC_CONFIG.stopped_buf
+        try:
+            frame = result_queue.get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
-            time.sleep(0.1)
-        else:
-            try:
-                fft_data = result_queue.get_nowait()
-                fft_data *= maxval
-                line.set_data(x, np.abs(fft_data))  # pyright: ignore  [reportUnknownArgumentType]
 
-                buf = BytesIO()
-                fig.savefig(buf, format="JPEG")
+            # calculate speed for hw
+            count_current = count
+            benchmark_info.fps = int(1 / loop_timer.duration() * (count_current - count_bak))
+            count_bak = count_current
 
-                frame = buf.getbuffer()
-                yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
-                count_current = count
-                benchmark_info.fps = int(1 / loop_timer.duration() * (count_current - count_bak))
-                count_bak = count_current
+        except queue.Empty:
+            time.sleep(0.001)
+            continue
 
-            except queue.Empty:
-                time.sleep(0.001)
-                continue
     stop_threads()
     logger.debug("Leaving")
