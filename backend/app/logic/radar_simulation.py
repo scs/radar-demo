@@ -309,7 +309,7 @@ def create_radar_result():
                 intensity_images = convert_to_intensity_image(complex_result=results)
                 frames: list[NDArray[np.uint8]] = []
                 for index in range(0, 4):
-                    frames.append(heat_map(intensity_images[index, ...]))
+                    frames.append(cfar(heat_map(intensity_images[index, ...])))
 
                 if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
                     radar_result_queues[0].put(create_frame(frames[0]))
