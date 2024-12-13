@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from numpy._typing import _Shape
 from numpy.typing import NDArray
 from PIL import Image
 
@@ -23,23 +22,27 @@ from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
 
+#######################################################################################################################
+# Module Global Variables
+#
+log_level = logging.NOTSET  # NOTSET, DEBUG, INFO, WARNING, ERROR
+
 logger = logging.getLogger(__name__)
 logger_stream = logging.StreamHandler()
-logger_stream.setLevel(logging.INFO)
+logger_stream.setLevel(log_level)
 formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
 logger_stream.setFormatter(formatter)
-logger.setLevel(level=logging.NOTSET)
+logger.setLevel(log_level)
 logger.addHandler(logger_stream)
 logger.propagate = False
 
-DEBUG_TIME = False
-
-
-radar_result_queues = [queue.Queue(), queue.Queue(), queue.Queue(), queue.Queue()]
-radar_send_queue = queue.Queue(maxsize=7)
-radar_receive_queue = queue.Queue(maxsize=7)
+result_queues = [queue.Queue(), queue.Queue(), queue.Queue(), queue.Queue()]
+send_queue = queue.Queue(maxsize=7)
+receive_queue = queue.Queue(maxsize=7)
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
+#
+#######################################################################################################################
 
 
 def reset_fifos() -> bool:
@@ -49,11 +52,27 @@ def reset_fifos() -> bool:
     return True
 
 
+def flush_queues() -> None:
+    logger.debug("Entering")
+    while not send_queue.empty():
+        _ = send_queue.get()
+
+    # Empty queues to have a clean slate
+    while not receive_queue.empty():
+        _ = receive_queue.get()
+
+    for result_queue in result_queues:
+        while not result_queue.empty():
+            _ = result_queue.get()
+    logger.debug("Leaving")
+
+
 def start_threads(idx: int) -> None:
     logger.debug("Starting Threads")
     global producer
     global consumer
     global converter
+    flush_queues()
     if idx == 0:
         logger.debug("Wait for mutex")
         locked = mutex_lock.acquire(timeout=0.1)
@@ -76,12 +95,7 @@ def stop_threads(idx: int) -> None:
         converter.join()
 
         # Empty queues to have a clean slate
-        while not radar_receive_queue.empty():
-            _ = radar_receive_queue.get()
-
-        for idx in range(0, 4):
-            while not radar_result_queues[idx].empty():
-                _ = radar_result_queues[idx].get()
+        flush_queues()
 
         range_doppler_info.reset()
 
@@ -104,7 +118,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     while GlobalState.get_current_model() in [Model.SHORT_RANGE.value, Model.QUAD_CORNER.value, Model.IMAGING.value]:
         counter += 1
         try:
-            frame = radar_result_queues[idx].get_nowait()
+            frame = result_queues[idx].get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
         except queue.Empty:
             time.sleep(0.001)
@@ -134,11 +148,11 @@ def send_radar_scene():
         mode = {Model.SHORT_RANGE.value: 0, Model.QUAD_CORNER.value: 1, Model.IMAGING.value: 2}
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
-                if not radar_send_queue.full():
+                if not send_queue.full():
                     send_step = current_send_step()
                     if send_scene(mode[GlobalState.get_current_model() or Model.SHORT_RANGE.value], send_step, 0):
                         timer.log_time()
-                        radar_send_queue.put(send_step)
+                        send_queue.put(send_step)
                 else:
                     time.sleep(0.016)  # queue max size * intended frame rate
             else:
@@ -170,10 +184,10 @@ def receive_radar_result_loop():
     while producer.is_alive():
         if GlobalState.use_hw():
             try:
-                send_step = radar_send_queue.get_nowait()
+                send_step = send_queue.get_nowait()
                 complex_result = receive_radar_result()
                 if send_step != previous_step:
-                    radar_receive_queue.put(complex_result)
+                    receive_queue.put(complex_result)
                 previous_step = send_step
                 range_doppler_info.fps = int(1 / timer.duration())
             except queue.Empty:
@@ -182,8 +196,8 @@ def receive_radar_result_loop():
             time.sleep(0.1)
 
     # clean up hw buffers
-    while not radar_send_queue.empty():
-        _ = radar_send_queue.get()
+    while not send_queue.empty():
+        _ = send_queue.get()
         _ = receive_radar_result()
 
     logger.debug("Stopping receiver thread")
@@ -227,20 +241,11 @@ def draw_box(
 def _draw_box(
     rgb_image: NDArray[np.uint8], color: tuple[np.uint8, np.uint8, np.uint8], coord: tuple[np.intp, ...], size: int
 ):
-    rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, 0] = color[0]
-    rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, 0] = color[0]
-    rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, 0] = color[0]
-    rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, 0] = color[0]
-
-    rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, 1] = color[1]
-    rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, 1] = color[1]
-    rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, 1] = color[1]
-    rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, 1] = color[1]
-
-    rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, 2] = color[2]
-    rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, 2] = color[2]
-    rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, 2] = color[2]
-    rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, 2] = color[2]
+    for rgb in range(0, 3):
+        rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, rgb] = color[rgb]
+        rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, rgb] = color[rgb]
+        rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, rgb] = color[rgb]
+        rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, rgb] = color[rgb]
 
 
 def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
@@ -280,57 +285,63 @@ def synthetic_result(current_step: int, channel: int) -> NDArray[np.int32]:
     return intensity_image
 
 
+def get_result_range() -> range:
+    if GlobalState.get_current_model() in [Model.SHORT_RANGE.value, Model.IMAGING.value]:
+        return range(0, 1)
+    else:
+        return range(0, 4)
+
+
+def stopped_stream():
+    flush_queues()
+    while consumer.is_alive() and GlobalState.is_stopped():
+        while not receive_queue.empty():
+            _ = receive_queue.get()
+        range_doppler_info.reset()
+        stop_buf = STATIC_CONFIG.stopped_buf
+        for result_idx in get_result_range():
+            result_queues[result_idx].put(stop_buf)
+        time.sleep(0.04)
+
+
+def hw_stream():
+    while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
+        results = None
+        # if the sw is to slow pop some frames from the receive queue
+        for _ in range(receive_queue.qsize() // 2):
+            _ = receive_queue.get()
+
+        # if not radar_receive_queue.empty():
+        try:
+            results = receive_queue.get_nowait()
+            if results.shape != (4, 1024, 512, 2):
+                logger.error(
+                    f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {results.shape}"
+                )
+                continue
+            intensity_images = convert_to_intensity_image(complex_result=results)
+            for result_idx in get_result_range():
+                frame = cfar(heat_map(intensity_images[result_idx, ...]))
+                result_queues[result_idx].put(create_frame(frame))
+        except queue.Empty:
+            time.sleep(0.001)
+
+
+def sw_stream():
+    while consumer.is_alive() and not GlobalState.is_stopped() and not GlobalState.use_hw():
+        for idx in get_result_range():
+            image = synthetic_result(GlobalState.get_current_steps()[idx], idx)
+            rgb_image = heat_map(image)
+            rgb_image = cfar(rgb_image)
+            frame = create_frame(rgb_image)
+            result_queues[idx].put(frame)
+
+
 def create_radar_result():
     while consumer.is_alive():
-        if GlobalState.is_stopped():
-            while not radar_receive_queue.empty():
-                _ = radar_receive_queue.get()
-            range_doppler_info.reset()
-            stop_buf = STATIC_CONFIG.stopped_buf
-            if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
-                radar_result_queues[0].put(stop_buf)
-            else:
-                for q in radar_result_queues:
-                    q.put(stop_buf)
-            time.sleep(0.04)
-
-        elif GlobalState.use_hw():
-            results = None
-            for _ in range(radar_receive_queue.qsize() // 2):
-                _ = radar_receive_queue.get()
-            if not radar_receive_queue.empty():
-                results = radar_receive_queue.get()
-            if results is not None:
-                if results.shape != (4, 1024, 512, 2):
-                    logger.error(
-                        f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {results.shape}"
-                    )
-                    continue
-                intensity_images = convert_to_intensity_image(complex_result=results)
-                frames: list[NDArray[np.uint8]] = []
-                for index in range(0, 4):
-                    frames.append(cfar(heat_map(intensity_images[index, ...])))
-
-                if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
-                    radar_result_queues[0].put(create_frame(frames[0]))
-                else:
-                    for idx, q in enumerate(radar_result_queues):
-                        q.put(create_frame(frames[idx]))
-            else:
-                time.sleep(0.001)
-
-        elif not GlobalState.use_hw():
-            if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
-                result_range = range(0, 1)
-            else:
-                result_range = range(0, 4)
-
-            for idx in result_range:
-                image = synthetic_result(GlobalState.get_current_steps()[idx], idx)
-                rgb_image = heat_map(image)
-                rgb_image = cfar(rgb_image)
-                frame = create_frame(rgb_image)
-                radar_result_queues[idx].put(frame)
+        stopped_stream()
+        hw_stream()
+        sw_stream()
 
 
 def export_results(intensity_image: NDArray[np.int32], current_step: int, channel: int) -> None:
