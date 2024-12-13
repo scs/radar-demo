@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy._typing import _Shape
 from numpy.typing import NDArray
 from PIL import Image
 
@@ -212,6 +213,43 @@ def heat_map(intensity_image: NDArray[np.int32]) -> NDArray[np.uint8]:
     return img
 
 
+def draw_box(
+    rgb_image: NDArray[np.uint8],
+    color: tuple[np.uint8, np.uint8, np.uint8],
+    coord: tuple[np.intp, ...],
+    size: int,
+    width: int,
+):
+    for i in range(0, width):
+        _draw_box(rgb_image, color, coord, size + i)
+
+
+def _draw_box(
+    rgb_image: NDArray[np.uint8], color: tuple[np.uint8, np.uint8, np.uint8], coord: tuple[np.intp, ...], size: int
+):
+    rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, 0] = color[0]
+    rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, 0] = color[0]
+    rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, 0] = color[0]
+    rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, 0] = color[0]
+
+    rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, 1] = color[1]
+    rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, 1] = color[1]
+    rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, 1] = color[1]
+    rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, 1] = color[1]
+
+    rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, 2] = color[2]
+    rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, 2] = color[2]
+    rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, 2] = color[2]
+    rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, 2] = color[2]
+
+
+def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
+    coord = np.argmax(rgb_image[..., 0])
+    shape_coord: tuple[np.intp, ...] = np.unravel_index(coord, rgb_image[..., 0].shape)
+    draw_box(rgb_image, (np.uint8(255), np.uint8(0), np.uint8(0)), shape_coord, 5, 2)
+    return rgb_image
+
+
 def create_frame(rgb_array: NDArray[np.uint8]):
     timer = Timer(name="create_frame")
     buf = BytesIO()
@@ -290,6 +328,7 @@ def create_radar_result():
             for idx in result_range:
                 image = synthetic_result(GlobalState.get_current_steps()[idx], idx)
                 rgb_image = heat_map(image)
+                rgb_image = cfar(rgb_image)
                 frame = create_frame(rgb_image)
                 radar_result_queues[idx].put(frame)
 
