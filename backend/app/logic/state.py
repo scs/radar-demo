@@ -1,9 +1,7 @@
 # pyright: reportAny=false
 import json
 import time
-from collections.abc import Generator
 from enum import Enum
-from typing import Any
 
 import numpy as np
 
@@ -144,7 +142,7 @@ class GlobalState:
         GlobalState.runningState = RunningState.STOPPED
 
     @classmethod
-    def get_current_state(cls) -> dict[str, Any]:
+    def get_current_state(cls):
         return GlobalState.to_dict()
 
     @classmethod
@@ -173,7 +171,7 @@ class GlobalState:
         return t.tolist()
 
     @classmethod
-    def gen_frame_number_response(cls) -> Generator[str, Any, Any]:
+    def gen_frame_number_response(cls):
         while True:
             frame_number = cls.gen_frame_number()
             completion = frame_number / STATIC_CONFIG.number_of_steps_in_period
