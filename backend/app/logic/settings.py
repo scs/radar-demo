@@ -41,6 +41,7 @@ class SettingLabel(Enum):
     RANGE_FFT = "Range FFT"
     DOPPLER_FFT = "Doppler FFT"
     BATCH_SIZE = "Batch Size"
+    CFAR = "CFAR"
 
 
 @dataclass
@@ -124,6 +125,11 @@ class Settings:
         if selected and selected.option:
             return selected.option
         return None
+
+    def get_cfar_enabled(self) -> bool:
+        if selected := self.get_selected(SettingLabel.CFAR):
+            return selected.type == "On"
+        return False
 
     def get_device(self) -> str:
         if selected := self.get_selected(SettingLabel.DEVICE):
@@ -214,6 +220,16 @@ batch_size_setting = Setting(
     selected=Selected(type="1024", option=None),
 )
 
+cfar_setting = Setting(
+    label=SettingLabel.CFAR,
+    valueMap=[
+        ValueMap(label="On", availableOptions=[]),
+        ValueMap(label="Off", availableOptions=[]),
+    ],
+    allOptions=[],
+    selected=Selected(type="On", option=None),
+)
+
 benchmark_settings = Settings(name="benchmark")
 benchmark_settings.add_setting(one_d_fft)
 benchmark_settings.add_setting(batch_size_setting)
@@ -222,4 +238,5 @@ benchmark_settings.add_setting(device_setting)
 radar_settings = Settings(name="radar")
 radar_settings.add_setting(range_fft_setting)
 radar_settings.add_setting(doppler_fft_setting)
+radar_settings.add_setting(cfar_setting)
 radar_settings.add_setting(device_setting)

@@ -100,6 +100,10 @@ class GlobalState:
         return cls.get_current_settings().get_device()
 
     @classmethod
+    def cfar_enabled(cls) -> bool:
+        return cls.get_current_settings().get_cfar_enabled()
+
+    @classmethod
     def get_current_batch_size(cls) -> int:
         return cls.get_current_settings().get_batch_size()
 

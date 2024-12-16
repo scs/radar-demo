@@ -227,6 +227,25 @@ def heat_map(intensity_image: NDArray[np.int32]) -> NDArray[np.uint8]:
     return img
 
 
+def draw_cross(
+    rgb_image: NDArray[np.uint8],
+    color: tuple[np.uint8, np.uint8, np.uint8],
+    coord: tuple[np.intp, ...],
+    size: int,
+    mask_size: int,
+    width: int,
+):
+    if width % 2 == 0:
+        width = max(width - 1, 0)
+
+    for rgb in range(0, 3):
+        rgb_image[coord[0] - size : coord[0] - mask_size, coord[1] - width : coord[1] + width, rgb] = color[rgb]
+        rgb_image[coord[0] + mask_size : coord[0] + size, coord[1] - width : coord[1] + width, rgb] = color[rgb]
+
+        rgb_image[coord[0] - width : coord[0] + width, coord[1] - size : coord[1] - mask_size, rgb] = color[rgb]
+        rgb_image[coord[0] - width : coord[0] + width, coord[1] + mask_size : coord[1] + size, rgb] = color[rgb]
+
+
 def draw_box(
     rgb_image: NDArray[np.uint8],
     color: tuple[np.uint8, np.uint8, np.uint8],
@@ -249,9 +268,14 @@ def _draw_box(
 
 
 def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
-    coord = np.argmax(rgb_image[..., 0])
-    shape_coord: tuple[np.intp, ...] = np.unravel_index(coord, rgb_image[..., 0].shape)
-    draw_box(rgb_image, (np.uint8(255), np.uint8(0), np.uint8(0)), shape_coord, 5, 2)
+    if GlobalState.cfar_enabled():
+        coord = np.argmax(rgb_image[..., 0])
+        shape_coord: tuple[np.intp, ...] = np.unravel_index(coord, rgb_image[..., 0].shape)
+        red = (np.uint8(255), np.uint8(0), np.uint8(0))
+        size = 5
+        width = 2
+        draw_box(rgb_image, red, shape_coord, size, width)
+        draw_cross(rgb_image, red, shape_coord, 3 * size, size, width)
     return rgb_image
 
 
