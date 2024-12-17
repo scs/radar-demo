@@ -62,6 +62,7 @@ class GlobalState:
             model = "NONE"
         cls.model = Model(model)
         cls.settings = benchmark_settings if cls.model == Model.ONE_D_FFT else radar_settings
+        STATIC_CONFIG.probe_hw()
         if STATIC_CONFIG.versal_lib:
             cls.settings.set_device(ComputePlatform.VE2302)
         else:

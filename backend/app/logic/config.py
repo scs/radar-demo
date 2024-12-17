@@ -27,30 +27,37 @@ class StaticConfig:
     frame_rate_per_second: int = 30
     iter: int = 0
     versal_lib: None | CDLL = None
+    probe_done: bool = False
 
     def __init__(self):
         self.period_in_seconds: NDArray[np.int32] = np.array([3, 4, 6, 12])
         self.static_stopped_image: Image.Image = Image.open(STOPPED_IMG)
 
-        class LibOption(Enum):
-            HW = 0
-            EMULATE = 1
+    def probe_hw(self):
+        if not self.probe_done:
 
-        lib_option = LibOption.HW.value
+            class LibOption(Enum):
+                HW = 0
+                EMULATE = 1
 
-        if Path.exists(DATA_SERVER):
-            try:
-                self.versal_lib = cdll.LoadLibrary(str(DATA_SERVER))
-                if self.versal_lib:
-                    return_code: int = self.versal_lib.init_server(lib_option)
-                    if return_code != lib_option:
-                        logger.error(f"Failed to open Shared Object return code was {return_code} expected {lib_option}")
-                        self.versal_lib = None
-            except Exception:
-                self.versal_lib = None
+            lib_option = LibOption.HW.value
+
+            if Path.exists(DATA_SERVER):
+                try:
+                    self.versal_lib = cdll.LoadLibrary(str(DATA_SERVER))
+                    if self.versal_lib:
+                        return_code: int = self.versal_lib.init_server(lib_option)
+                        if return_code != lib_option:
+                            logger.error(
+                                f"Failed to open Shared Object return code was {return_code} expected {lib_option}"
+                            )
+                            self.versal_lib = None
+                except Exception:
+                    self.versal_lib = None
+        self.probe_done = True
 
     @property
-    def number_of_steps_in_period(self) :
+    def number_of_steps_in_period(self):
         ret: NDArray[np.int32] = self.frame_rate_per_second * self.period_in_seconds
         return ret
 

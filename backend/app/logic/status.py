@@ -105,11 +105,12 @@ class HwInfo(ABC):
 @dataclass
 class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
+    ffts_emulation: NDArray[np.int32] = np.zeros(1000).astype(np.int32)
 
     def reset(self):  # pyright: ignore [reportImplicitOverride]
         self.frame_rate: NDArray[np.int32] = np.zeros(100).astype(np.int32)
         self.power: float = 0
-        self.ffts_emulation: NDArray[np.int32] = np.zeros(1000).astype(np.int32)
+        self.ffts_emulation = np.zeros(1000).astype(np.int32)
 
     def set_ffts_emulation(self, value: int):
         self.ffts_emulation = np.append(self.ffts_emulation, value)
