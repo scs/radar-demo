@@ -16,7 +16,7 @@ WIN_SIZE = 20
 
 def get_info():
     settings = GlobalState.get_current_settings()
-    if GlobalState.get_current_model() == Model.ONE_D_FFT.value:
+    if GlobalState.get_current_model() == Model.ONE_D_FFT:
         if STATIC_CONFIG.versal_lib:
             benchmark_info.temperature = STATIC_CONFIG.versal_lib.get_temp_val() / 128.0
             benchmark_info.power = STATIC_CONFIG.versal_lib.get_power_val() / 1000.0
@@ -175,7 +175,7 @@ class RangeDopplerInfo(HwInfo):
     def generic_fft_per_sec_int(self, fft_size: int) -> int:
         mean = np.mean(self.frame_rate)
         channels = 16
-        if GlobalState.get_current_model() == Model.SHORT_RANGE.value:
+        if GlobalState.get_current_model() == Model.SHORT_RANGE:
             channels /= 4
         return int(channels * fft_size * mean)
 

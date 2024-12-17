@@ -10,7 +10,7 @@ import time
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,9 +36,31 @@ logger.setLevel(log_level)
 logger.addHandler(logger_stream)
 logger.propagate = False
 
-result_queues = [queue.Queue(), queue.Queue(), queue.Queue(), queue.Queue()]
-send_queue = queue.Queue(maxsize=7)
-receive_queue = queue.Queue(maxsize=7)
+T = TypeVar("T")
+
+
+@final
+class QueueList(Generic[T]):
+    def __init__(self, num_queues: int, maxsize: int = 0):
+        self.queues = [queue.Queue(maxsize) for _ in range(num_queues)]
+
+    def flush(self):
+        for q in self.queues:
+            while not q.empty():
+                _ = q.get()
+
+    def __getitem__(self, idx: int) -> queue.Queue[T]:
+        return self.queues[idx]
+
+    def __iter__(self) -> Generator[queue.Queue[T], None, None]:
+        for q in self.queues:
+            yield q
+
+
+result_queues = QueueList(4)
+send_queues = QueueList(4, 7)
+receive_queues = QueueList(4, 7)
+
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
 #
@@ -54,60 +76,53 @@ def reset_fifos() -> bool:
 
 def flush_queues() -> None:
     logger.debug("Entering")
-    while not send_queue.empty():
-        _ = send_queue.get()
-
-    # Empty queues to have a clean slate
-    while not receive_queue.empty():
-        _ = receive_queue.get()
-
-    for result_queue in result_queues:
-        while not result_queue.empty():
-            _ = result_queue.get()
+    send_queues.flush()
+    receive_queues.flush()
+    result_queues.flush()
+    _ = reset_fifos()
     logger.debug("Leaving")
 
 
 def start_threads(idx: int) -> None:
-    logger.debug("Starting Threads")
+    logger.debug("Entering")
     global producer
     global consumer
     global converter
-    flush_queues()
     if idx == 0:
         logger.debug("Wait for mutex")
         locked = mutex_lock.acquire(timeout=0.1)
         if locked:
+            flush_queues()
             logger.debug("Mutex aquired")
-            _ = reset_fifos()
             producer = threading.Thread(target=send_radar_scene, name="producer")
             producer.start()
             consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
             consumer.start()
             converter = threading.Thread(target=create_radar_result, name="converter")
             converter.start()
+    logger.debug("Leaving")
 
 
 def stop_threads(idx: int) -> None:
-    logger.debug("Stopping threads")
+    logger.debug("Entering")
     stop_producer.set()
     if idx == 0:
         # converter only stops once producer and consumer is stopped so we only need to wait for the converter
         converter.join()
 
-        # Empty queues to have a clean slate
-        flush_queues()
-
         range_doppler_info.reset()
 
         logger.debug("Releasing mutex")
         mutex_lock.release()
+    logger.debug("Leaving")
 
 
 def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]
+    logger.debug("Entering")
     while GlobalState.get_current_model() not in [
-        Model.SHORT_RANGE.value,
-        Model.QUAD_CORNER.value,
-        Model.IMAGING.value,
+        Model.SHORT_RANGE,
+        Model.QUAD_CORNER,
+        Model.IMAGING,
     ]:
         time.sleep(0.001)
 
@@ -115,7 +130,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     start_threads(idx)
 
     counter = 0
-    while GlobalState.get_current_model() in [Model.SHORT_RANGE.value, Model.QUAD_CORNER.value, Model.IMAGING.value]:
+    while not GlobalState.leaving_page():
         counter += 1
         try:
             frame = result_queues[idx].get_nowait()
@@ -126,6 +141,8 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
 
     logger.debug(f"Stopping threads {GlobalState.get_current_model()}")
     stop_threads(idx)
+    GlobalState.set_left_page()
+    logger.debug("Leaving")
 
 
 def send_scene(mode: int, step: int, emulation: int) -> bool:
@@ -145,14 +162,14 @@ def current_send_step() -> int:
 def send_radar_scene():
     timer = Timer("send_radar_scene")
     if GlobalState.has_hw():
-        mode = {Model.SHORT_RANGE.value: 0, Model.QUAD_CORNER.value: 1, Model.IMAGING.value: 2}
+        mode = {Model.SHORT_RANGE: 0, Model.QUAD_CORNER: 1, Model.IMAGING: 2}
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
-                if not send_queue.full():
+                if not send_queues[0].full():
                     send_step = current_send_step()
-                    if send_scene(mode[GlobalState.get_current_model() or Model.SHORT_RANGE.value], send_step, 0):
+                    if send_scene(mode[GlobalState.get_current_model() or Model.SHORT_RANGE], send_step, 0):
                         timer.log_time()
-                        send_queue.put(send_step)
+                        send_queues[0].put(send_step)
                 else:
                     time.sleep(0.016)  # queue max size * intended frame rate
             else:
@@ -184,10 +201,10 @@ def receive_radar_result_loop():
     while producer.is_alive():
         if GlobalState.use_hw():
             try:
-                send_step = send_queue.get_nowait()
+                send_step = send_queues[0].get_nowait()
                 complex_result = receive_radar_result()
                 if send_step != previous_step:
-                    receive_queue.put(complex_result)
+                    receive_queues[0].put(complex_result)
                 previous_step = send_step
                 range_doppler_info.fps = int(1 / timer.duration())
             except queue.Empty:
@@ -196,9 +213,11 @@ def receive_radar_result_loop():
             time.sleep(0.1)
 
     # clean up hw buffers
-    while not send_queue.empty():
-        _ = send_queue.get()
-        _ = receive_radar_result()
+
+    for q in send_queues:
+        while not q.empty():
+            _ = q.get()
+            _ = receive_radar_result()
 
     logger.debug("Stopping receiver thread")
 
@@ -290,6 +309,7 @@ def create_frame(rgb_array: NDArray[np.uint8]):
 
 
 def synthetic_result(current_step: int, channel: int) -> NDArray[np.int32]:
+    logger.debug("Entering")
     timer = Timer(name="synthetic_result")
     phase: NDArray[np.float32] = 2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
     ypos = int((np.cos(phase + np.pi) * 0.9 + 1) / 2 * 1023)
@@ -306,38 +326,42 @@ def synthetic_result(current_step: int, channel: int) -> NDArray[np.int32]:
     noise = np.random.randint(1, 32, intensity_image.shape, dtype=np.uint8)
     intensity_image = np.clip(intensity_image + noise, 0, 255).astype(np.int32)
     timer.log_time()
+    logger.debug("Leaving")
     return intensity_image
 
 
 def get_result_range() -> range:
-    if GlobalState.get_current_model() in [Model.SHORT_RANGE.value, Model.IMAGING.value]:
+    if GlobalState.get_current_model() in [Model.SHORT_RANGE, Model.IMAGING]:
         return range(0, 1)
     else:
         return range(0, 4)
 
 
 def stopped_stream():
-    flush_queues()
+    logger.debug("Entering")
+    result_queues.flush()
+    receive_queues.flush()
     while consumer.is_alive() and GlobalState.is_stopped():
-        while not receive_queue.empty():
-            _ = receive_queue.get()
+        receive_queues.flush()
         range_doppler_info.reset()
         stop_buf = STATIC_CONFIG.stopped_buf
         for result_idx in get_result_range():
             result_queues[result_idx].put(stop_buf)
         time.sleep(0.04)
+    logger.debug("Leaving")
 
 
 def hw_stream():
+    logger.debug("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
         results = None
         # if the sw is to slow pop some frames from the receive queue
-        for _ in range(receive_queue.qsize() // 2):
-            _ = receive_queue.get()
+        for _ in range(receive_queues[0].qsize() // 2):
+            _ = receive_queues[0].get()
 
         # if not radar_receive_queue.empty():
         try:
-            results = receive_queue.get_nowait()
+            results = receive_queues[0].get_nowait()
             if results.shape != (4, 1024, 512, 2):
                 logger.error(
                     f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {results.shape}"
@@ -349,9 +373,11 @@ def hw_stream():
                 result_queues[result_idx].put(create_frame(frame))
         except queue.Empty:
             time.sleep(0.001)
+    logger.debug("Leaving")
 
 
 def sw_stream():
+    logger.debug("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and not GlobalState.use_hw():
         for idx in get_result_range():
             image = synthetic_result(GlobalState.get_current_steps()[idx], idx)
@@ -359,13 +385,18 @@ def sw_stream():
             rgb_image = cfar(rgb_image)
             frame = create_frame(rgb_image)
             result_queues[idx].put(frame)
+    logger.debug("Leaving")
 
 
 def create_radar_result():
+    logger.debug("Entering")
     while consumer.is_alive():
         stopped_stream()
         hw_stream()
         sw_stream()
+    receive_queues.flush()
+    result_queues.flush()
+    logger.debug("Leaving")
 
 
 def export_results(intensity_image: NDArray[np.int32], current_step: int, channel: int) -> None:

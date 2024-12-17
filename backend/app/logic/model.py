@@ -6,3 +6,4 @@ class Model(Enum):
     SHORT_RANGE = "SHORT_RANGE"
     QUAD_CORNER = "QUAD_CORNER"
     IMAGING = "IMAGING"
+    NONE = "NONE"

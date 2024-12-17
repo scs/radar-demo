@@ -1,3 +1,4 @@
+from time import sleep
 from typing import Any
 
 from flask import Response, jsonify, render_template, request
@@ -62,6 +63,14 @@ def init_new_model():
     model: str = data["demoModel"]
     GlobalState.init_state(model)
     return jsonify(GlobalState.get_current_state())
+
+
+@app.route("/leavePage", methods=["Get"])
+def leave_page():
+    GlobalState.set_leaving_page()
+    while GlobalState.leaving_page():
+        sleep(0.01)
+    return "", 200
 
 
 @app.route("/initApp", methods=["GET"])

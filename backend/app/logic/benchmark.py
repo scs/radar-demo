@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Generator
 from io import BytesIO
-from typing import Any
+from typing import Any, TypeVar
 
 import matplotlib
 import numpy as np
@@ -16,7 +16,6 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.model import Model
 from app.logic.state import GlobalState
 from app.logic.status import benchmark_info
 from app.logic.timer import Timer
@@ -25,7 +24,6 @@ matplotlib.use("agg")
 
 
 def get_current_phase(samples: int) -> NDArray[np.float32]:
-    logger.debug("Entering")
     current_step = GlobalState.get_current_steps()[0]
     border = 20
     position: int = abs((STATIC_CONFIG.number_of_steps_in_period[0] / 2) - current_step)
@@ -36,16 +34,13 @@ def get_current_phase(samples: int) -> NDArray[np.float32]:
     )
     norm_value: int = STATIC_CONFIG.number_of_steps_in_period[0] + border
     phase = np.linspace(0 + border, samples, samples) * (2 * np.pi * (offseted_position / norm_value) * 2)
-    logger.debug("Leaving")
     return phase
 
 
 def get_current_signal(samples: int, amplitude: int) -> NDArray[np.int32]:
-    logger.debug("Entering")
     phase = get_current_phase(samples)
     rand_noise = np.random.normal(scale=0.15, size=samples)
     signal = np.exp(1.0j * (phase + rand_noise)) * amplitude
-    logger.debug("Leaving")
     return signal
 
 
@@ -81,9 +76,9 @@ logger.info("benchmark demo app")
 logger.addHandler(logger_stream)
 logger.propagate = False
 
+send_queue: queue.Queue[int] = queue.Queue(maxsize=7)
+receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
 result_queue = queue.Queue(maxsize=7)
-send_queue = queue.Queue(maxsize=7)
-receive_queue = queue.Queue(maxsize=7)
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
 
@@ -158,12 +153,12 @@ def send_data():
     logger.debug("Leaving")
 
 
-def receive_result():
+def receive_result() -> NDArray[np.int16]:
     logger.debug("Entering")
-    fft_data = np.zeros((SAMPLES, 2)).astype(np.int16)
+    fft_data: NDArray[np.int16] = np.zeros((SAMPLES, 2)).astype(np.int16)
     receive_1d_fft_results(fft_data, 2 * SAMPLES * ctypes.sizeof(ctypes.c_int16))
-    receive_queue.put(fft_data)
     logger.debug("Leaving")
+    return fft_data
 
 
 def receive_data():
@@ -173,13 +168,18 @@ def receive_data():
         if GlobalState.use_hw():
             try:
                 _ = send_queue.get_nowait()
-                receive_result()
+                fft_data = receive_result()
+                receive_queue.put(fft_data)
                 count = count + 1
             except queue.Empty:
                 time.sleep(0.001)
                 pass
         else:
             time.sleep(0.1)
+
+    while not send_queue.empty():
+        _ = send_queue.get()
+        _ = receive_result()
     logger.debug("Leaving")
 
 
@@ -201,15 +201,16 @@ def hw_stream():
             fft_data = receive_queue.get()
         if fft_data is not None:
             plot_timer = Timer(name="Plot")
-            real = fft_data[..., 0].astype(float)
-            imag = fft_data[..., 1].astype(float)
-            amp = np.sqrt(real**2 + imag**2)  # pyright: ignore [reportUnknownArgumentType]
-            amp = amp / np.max(amp)
+            real: NDArray[np.float32] = fft_data[..., 0].astype(np.float32)
+            imag: NDArray[np.float32] = fft_data[..., 1].astype(np.float32)
+            amp: NDArray[np.float32] = np.sqrt(real**2 + imag**2)
+            norm_amp: NDArray[np.float32] = amp / np.max(amp)
             plot_timer.log_time()
-            result_queue.put(create_frame(amp))
+            result_queue.put(create_frame(norm_amp))
 
 
 def sw_stream():
+    logger.debug("Entering")
     while receiver.is_alive() and not GlobalState.is_stopped() and not GlobalState.use_hw():
         signal_timer = Timer(name="signal generation")
         signal = get_current_signal(SAMPLES, AMPLITUDE)
@@ -220,15 +221,20 @@ def sw_stream():
         fft_data = np.abs(fft_data) * SAMPLES
         fft_data = fft_data / np.max(fft_data)
         result_queue.put(create_frame(fft_data))
+    logger.debug("Leaving")
 
 
 def stopped_stream():
+    logger.debug("Entering")
+    flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
+    flush_queue(receive_queue)
     while receiver.is_alive() and GlobalState.is_stopped():
-        flush_queues()
+        flush_queue(receive_queue)
         benchmark_info.reset()
         frame = STATIC_CONFIG.stopped_buf
         result_queue.put(frame)
         time.sleep(0.04)
+    logger.debug("Entering")
 
 
 def convert_data():
@@ -238,6 +244,8 @@ def convert_data():
         sw_stream()
         stopped_stream()
 
+    flush_queue(receive_queue)
+    flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
     logger.debug("Leaving")
 
 
@@ -250,7 +258,6 @@ def start_threads() -> None:
     locked = mutex_lock.acquire(timeout=0.1)
     if locked:
         logger.debug("Mutex aquired")
-        _ = reset_fifos()
         sender = threading.Thread(target=send_data, name="sender")
         sender.start()
         receiver = threading.Thread(target=receive_data, name="receiver")
@@ -267,7 +274,6 @@ def stop_threads() -> None:
     stop_producer.set()
     # converter only stops once producer and consumer is stopped so we only need to wait for the converter
     converter.join()
-    flush_queues()
     benchmark_info.reset()
 
     logger.debug("Releasing mutex")
@@ -275,18 +281,20 @@ def stop_threads() -> None:
     logger.debug("Leaving")
 
 
+T = TypeVar("T")
+
+
+def flush_queue(q: queue.Queue[T]):
+    while not q.empty():
+        _ = q.get()
+
+
 def flush_queues() -> None:
     logger.debug("Entering")
-    while not send_queue.empty():
-        _ = send_queue.get()
-
-    # Empty queues to have a clean slate
-    while not receive_queue.empty():
-        _ = receive_queue.get()
-
-    while not result_queue.empty():
-        _ = result_queue.get()
-
+    flush_queue(send_queue)
+    flush_queue(receive_queue)
+    flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
+    _ = reset_fifos()
     logger.debug("Leaving")
 
 
@@ -297,7 +305,8 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
     loop_timer = Timer("benchmark")
     count_bak = count
 
-    while GlobalState.get_current_model() == Model.ONE_D_FFT.value:
+    while not GlobalState.leaving_page():
+        logger.debug(f"Model == {GlobalState.get_current_model().value}")
         try:
             frame = result_queue.get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
@@ -313,3 +322,4 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
 
     stop_threads()
     logger.debug("Leaving")
+    GlobalState.set_left_page()

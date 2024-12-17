@@ -17,6 +17,12 @@ class RunningState(Enum):
     STOPPED = "STOPPED"
 
 
+class PageState(Enum):
+    LEAVING = "LEAVING"
+    LEFT = "LEFT"
+    ENTERED = "ENTERED"
+
+
 def compute_position_old(phase: float) -> dict[str, int]:
     return {
         "x": (np.cos(phase) * np.sin(phase)) / (np.sin(phase) ** 2 + 1) * 10,
@@ -27,8 +33,8 @@ def compute_position_old(phase: float) -> dict[str, int]:
 
 class GlobalState:
     settings: Settings = benchmark_settings
-    runningState: RunningState = RunningState.STOPPED
-    model: str | None = None
+    running_state: RunningState = RunningState.STOPPED
+    model: Model = Model("NONE")
     current_steps: list[int] = [0, 0, 0, 0]
     current_positions: tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]] = (
         {"x": 0.0, "y": 0.0, "z": 0.0},
@@ -38,27 +44,31 @@ class GlobalState:
     )
     amplitudes: list[tuple[int, int, int]] = [(5, 10, 0)] * 4
     offsets: list[tuple[int, int, int]] = [(0, 0, 0)] * 4
+    page_state: PageState = PageState.LEFT
 
     @classmethod
     def to_dict(cls):
         return {
             "settings": cls.settings.to_dict(),
-            "runningState": cls.runningState.value,
-            "model": cls.model,
+            "runningState": cls.running_state.value,
+            "model": cls.model.value,
             "current_steps": cls.current_steps,
             "current_positions": cls.current_positions,
         }
 
     @classmethod
     def init_state(cls, model: str | None):
-        cls.settings = benchmark_settings if model == Model.ONE_D_FFT.value else radar_settings
+        if model is None:
+            model = "NONE"
+        cls.model = Model(model)
+        cls.settings = benchmark_settings if cls.model == Model.ONE_D_FFT else radar_settings
         if STATIC_CONFIG.versal_lib:
             cls.settings.set_device(ComputePlatform.VE2302)
         else:
             cls.settings.disable_hw()
 
-        cls.runningState = RunningState.STOPPED
-        cls.model = model
+        cls.running_state = RunningState.STOPPED
+        cls.page_state = PageState.ENTERED
         cls.current_steps = [0, 0, 0, 0]
 
         cls.current_positions = np.vectorize(compute_position, signature="(),(n),(n)->()")(
@@ -74,12 +84,12 @@ class GlobalState:
         GlobalState.current_steps = steps
 
     @classmethod
-    def get_current_model(cls) -> str | None:
+    def get_current_model(cls) -> Model:
         return GlobalState.model
 
     @classmethod
     def get_current_running_state(cls) -> RunningState:
-        return GlobalState.runningState
+        return GlobalState.running_state
 
     @classmethod
     def get_current_positions(cls) -> tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]]:
@@ -121,29 +131,29 @@ class GlobalState:
 
     @classmethod
     def is_running(cls) -> bool:
-        return GlobalState.runningState != RunningState.STOPPED
+        return GlobalState.running_state != RunningState.STOPPED
 
     @classmethod
     def is_stopped(cls) -> bool:
-        return GlobalState.runningState == RunningState.STOPPED
+        return GlobalState.running_state == RunningState.STOPPED
 
     @classmethod
     def is_stopping(cls) -> bool:
-        return GlobalState.runningState == RunningState.STOPPING
+        return GlobalState.running_state == RunningState.STOPPING
 
     @classmethod
     def set_stopping(cls) -> None:
-        if GlobalState.runningState == RunningState.RUNNING:
-            GlobalState.runningState = RunningState.STOPPING
+        if GlobalState.running_state == RunningState.RUNNING:
+            GlobalState.running_state = RunningState.STOPPING
 
     @classmethod
     def set_running(cls) -> None:
-        if GlobalState.runningState == RunningState.STOPPED:
-            GlobalState.runningState = RunningState.RUNNING
+        if GlobalState.running_state == RunningState.STOPPED:
+            GlobalState.running_state = RunningState.RUNNING
 
     @classmethod
     def set_stopped(cls) -> None:
-        GlobalState.runningState = RunningState.STOPPED
+        GlobalState.running_state = RunningState.STOPPED
 
     @classmethod
     def get_current_state(cls):
@@ -193,3 +203,23 @@ class GlobalState:
 
             if cls.is_stopped():
                 break
+
+    @classmethod
+    def set_leaving_page(cls):
+        cls.page_state = PageState.LEAVING
+
+    @classmethod
+    def set_left_page(cls):
+        cls.page_state = PageState.LEAVING
+
+    @classmethod
+    def left_page(cls) -> bool:
+        return cls.page_state == PageState.LEFT
+
+    @classmethod
+    def entered_page(cls) -> bool:
+        return cls.page_state == PageState.ENTERED
+
+    @classmethod
+    def leaving_page(cls) -> bool:
+        return cls.page_state == PageState.LEAVING
