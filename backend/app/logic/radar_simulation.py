@@ -141,7 +141,8 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
 
     logger.debug(f"Stopping threads {GlobalState.get_current_model()}")
     stop_threads(idx)
-    GlobalState.set_left_page()
+    if idx == 0:
+        GlobalState.set_left_page()
     logger.debug("Leaving")
 
 

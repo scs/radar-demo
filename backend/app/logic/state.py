@@ -211,7 +211,7 @@ class GlobalState:
 
     @classmethod
     def set_left_page(cls):
-        cls.page_state = PageState.LEAVING
+        cls.page_state = PageState.LEFT
 
     @classmethod
     def left_page(cls) -> bool:
