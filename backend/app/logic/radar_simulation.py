@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.model import Model
+from app.logic.model import MODEL_LOOKUP, Model
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
@@ -25,13 +25,37 @@ from app.logic.timer import Timer
 #######################################################################################################################
 # Module Global Variables
 #
-log_level = logging.NOTSET  # NOTSET, DEBUG, INFO, WARNING, ERROR
+log_level = logging.DEBUG  # NOTSET, DEBUG, INFO, WARNING, ERROR
+
+
+class CustomFormatter(logging.Formatter):
+
+    grey: str = "\x1b[38;20m"
+    yellow: str = "\x1b[33;20m"
+    red: str = "\x1b[31;20m"
+    bold_red: str = "\x1b[31;1m"
+    reset: str = "\x1b[0m"
+    format_str: str = "%(levelname)-8s (%(filename)-26s:%(lineno)3d:%(funcName)-30s) - %(message)s "
+
+    FORMATS: dict[int, str] = {
+        logging.DEBUG: grey + format_str + reset,
+        logging.INFO: grey + format_str + reset,
+        logging.WARNING: yellow + format_str + reset,
+        logging.ERROR: red + format_str + reset,
+        logging.CRITICAL: bold_red + format_str + reset,
+    }
+
+    def format(self, record: logging.LogRecord):  # pyright: ignore [reportImplicitOverride]
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
 
 logger = logging.getLogger(__name__)
 logger_stream = logging.StreamHandler()
 logger_stream.setLevel(log_level)
-formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
-logger_stream.setFormatter(formatter)
+# formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
+logger_stream.setFormatter(CustomFormatter())
 logger.setLevel(log_level)
 logger.addHandler(logger_stream)
 logger.propagate = False
@@ -70,8 +94,8 @@ class QueueList(Generic[T]):
 
 
 result_queues = QueueList(num_queues=4, maxsize=2)
-send_queue = queue.Queue(maxsize=7)
-receive_queues = QueueList(num_queues=4, maxsize=7)
+send_queue = queue.Queue(maxsize=4)
+receive_queues = QueueList(num_queues=4, maxsize=3)
 
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
@@ -96,12 +120,12 @@ def flush_queues() -> None:
     flush(send_queue)
     receive_queues.flush()
     result_queues.flush()
-    _ = reset_fifos()
+    # _ = reset_fifos()
     logger.debug("Leaving")
 
 
 def start_threads(idx: int) -> None:
-    logger.debug("Entering")
+    logger.debug(f"Entering START THREADS with idx = {idx}")
     global producer
     global consumer
     global converter
@@ -110,21 +134,25 @@ def start_threads(idx: int) -> None:
         locked = mutex_lock.acquire(timeout=0.1)
         if locked:
             flush_queues()
-            logger.debug("Mutex aquired")
+            logger.debug("-- Mutex aquired --")
             producer = threading.Thread(target=send_radar_scene, name="producer")
             producer.start()
             consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
             consumer.start()
             converter = threading.Thread(target=create_radar_result, name="converter")
             converter.start()
-    logger.debug("Leaving")
+        else:
+            logger.error("!! Mutex NOT aquired!!")
+    logger.debug(f"Leaving START THREADS with idx = {idx}")
 
 
 def stop_threads(idx: int) -> None:
     logger.debug("Entering")
     stop_producer.set()
+    logger.info("set stop_producer")
     if idx == 0:
-        # converter only stops once producer and consumer is stopped so we only need to wait for the converter
+        producer.join()
+        consumer.join()
         converter.join()
 
         range_doppler_info.reset()
@@ -135,7 +163,7 @@ def stop_threads(idx: int) -> None:
 
 
 def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]
-    logger.debug("Entering")
+    logger.debug(f"Entering GEN FRAMES with idx = {idx}")
     while GlobalState.get_current_model() not in [
         Model.SHORT_RANGE,
         Model.QUAD_CORNER,
@@ -160,18 +188,22 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     stop_threads(idx)
     if idx == 0:
         GlobalState.set_left_page()
-    logger.debug("Leaving")
+    logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 
 def send_scene():
     err = -1
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
     step = GlobalState.get_current_steps()
-    for radar_idx in get_result_range():
+    uid = MODEL_LOOKUP[GlobalState.model.value]
+    for idx in get_result_range():
+        logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
         if STATIC_CONFIG.versal_lib:
-            err: int = STATIC_CONFIG.versal_lib.send_scene(radar_idx, step[radar_idx], num_channels, 0)
+            err: int = STATIC_CONFIG.versal_lib.send_scene(idx, uid, step[idx], num_channels, 0)
             if err == 0:
-                send_queue.put(step)
+                send_queue.put(step[0])
+            else:
+                logger.error("Error sending to card")
 
 
 def current_send_step() -> int:
@@ -182,9 +214,11 @@ def current_send_step() -> int:
 
 
 def send_radar_scene():
+    logger.debug("Entering")
     timer = Timer("send_radar_scene")
     if GlobalState.has_hw():
         while not stop_producer.is_set():
+            logger.info("looping")
             if GlobalState.use_hw() and GlobalState.is_running():
                 send_scene()
                 timer.log_time()
@@ -194,23 +228,27 @@ def send_radar_scene():
         while not stop_producer.is_set():
             time.sleep(0.1)
 
-    logger.debug("Stopping sender thread")
+    logger.debug("Leaving")
 
 
-def receive_radar_result() -> tuple[int, NDArray[np.int16]]:
+def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
     complex_result = np.empty((1024, 512), np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
-    idx = np.array([0]).astype(np.uint32)
+    idx = ctypes.c_uint32(0)
+    uid = ctypes.c_uint32(0)
     if STATIC_CONFIG.versal_lib:
         err: int = STATIC_CONFIG.versal_lib.receive_result(
             complex_result.ctypes,
-            idx.ctypes,
+            ctypes.byref(idx),
+            ctypes.byref(uid),
             1024 * 512 * ctypes.sizeof(ctypes.c_int16),
             0,
         )
     timer.log_time()
-    return (idx[0], complex_result) if err == 0 else (0, np.zeros((1024, 512)).astype(np.int16))
+    return (
+        (idx.value, uid.value, complex_result) if err == 0 else (0, uid.value, np.zeros((1024, 512)).astype(np.int16))
+    )
 
 
 def check_bundle_step(radar_idx: int, bundle_step: int | None, step: int) -> int:
@@ -223,28 +261,38 @@ def check_bundle_step(radar_idx: int, bundle_step: int | None, step: int) -> int
 
 def check_expected_radar_idx(received: int, expected: int):
     if received != expected:
-        logger.error(f"Unmatched index for expecte result expected = {expected}, actual = {received}")
+        logger.error(f"Unmatched index for expected result expected = {expected}, actual = {received}")
 
 
 def receive_radar_result_loop():
+    logger.debug("Entering")
     timer = Timer(name="receive loop")
     previous_step = -1
+    count = 0
     while producer.is_alive():
+        count += 1
+        if count % 50 == 0:
+            logger.info(f"Producer is alive = {producer.is_alive()}")
         if GlobalState.use_hw():
             try:
                 # check if any is full and only push to queue if all have room. This ensures that the queues stay in sync
                 full = receive_queues.anyfull()
-                send_step = 0
+                send_step = -1
                 bundle_step: None | int = None
                 for i in get_result_range():
                     send_step = send_queue.get_nowait()
+                    logger.debug(f"receiving step {send_step} radar_idx = {i}")
                     bundle_step = check_bundle_step(i, bundle_step, send_step)
-                    idx, complex_result = receive_radar_result()
+                    idx, uid, complex_result = receive_radar_result()
+                    if uid != MODEL_LOOKUP[GlobalState.model.value]:
+                        logger.error(f"UID model:{uid} current model is {MODEL_LOOKUP[GlobalState.model.value]}")
                     check_expected_radar_idx(idx, i)
                     if send_step != previous_step and not full:
-                        receive_queues[idx].put(complex_result)
-                    previous_step = send_step
+                        logger.debug(f"pushing to receive_queue[{idx}]")
+                        receive_queues[i].put(complex_result)
+                previous_step = send_step
                 range_doppler_info.fps = int(1 / timer.duration())
+                # logger.info("SUCCESSFULL RECEIVED RESULT")
             except queue.Empty:
                 time.sleep(0.001)
         else:
@@ -252,11 +300,12 @@ def receive_radar_result_loop():
 
     # clean up hw buffers
     # dequeue send_queue
+    logger.debug("Cleaning up remaining data")
     while not send_queue.empty():
         _ = send_queue.get()
         _ = receive_radar_result()
 
-    logger.debug("Stopping receiver thread")
+    logger.debug("Leaving")
 
 
 def convert_to_intensity_image(complex_result: NDArray[np.int16]) -> NDArray[np.int32]:
@@ -275,7 +324,7 @@ def convert_to_intensity_image(complex_result: NDArray[np.int16]) -> NDArray[np.
 def norm_image(image: NDArray[np.int16]) -> NDArray[np.uint8]:
     max: np.int16 = np.amax(image)
     norm_image = image / max * 255
-    return norm_image.astype(np.uint8)
+    return np.roll(norm_image.astype(np.uint8), 256, axis=1)
 
 
 def heat_map(intensity_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
@@ -300,12 +349,27 @@ def draw_cross(
     if width % 2 == 0:
         width = max(width - 1, 0)
 
-    for rgb in range(0, 3):
-        rgb_image[coord[0] - size : coord[0] - mask_size, coord[1] - width : coord[1] + width, rgb] = color[rgb]
-        rgb_image[coord[0] + mask_size : coord[0] + size, coord[1] - width : coord[1] + width, rgb] = color[rgb]
+    left = max(0, coord[0] - size)
+    left_box = max(0, coord[0] - mask_size)
+    right = min(1023, coord[0] + size)
+    right_box = min(1023, coord[0] + mask_size)
 
-        rgb_image[coord[0] - width : coord[0] + width, coord[1] - size : coord[1] - mask_size, rgb] = color[rgb]
-        rgb_image[coord[0] - width : coord[0] + width, coord[1] + mask_size : coord[1] + size, rgb] = color[rgb]
+    top = min(511, coord[1] + size)
+    top_box = min(511, coord[1] + mask_size)
+    bottom = max(0, coord[1] - size)
+    bottom_box = max(0, coord[1] - mask_size)
+
+    width_left = max(0, coord[0] - width)
+    width_right = min(1023, coord[0] + width)
+    width_bottom = max(0, coord[1] - width)
+    width_top = min(511, coord[1] + width)
+
+    for rgb in range(0, 3):
+        rgb_image[left:left_box, width_bottom:width_top, rgb] = color[rgb]
+        rgb_image[right_box:right, width_bottom:width_top, rgb] = color[rgb]
+
+        rgb_image[width_left:width_right, bottom:bottom_box, rgb] = color[rgb]
+        rgb_image[width_left:width_right, top_box:top, rgb] = color[rgb]
 
 
 def draw_box(
@@ -322,11 +386,15 @@ def draw_box(
 def _draw_box(
     rgb_image: NDArray[np.uint8], color: tuple[np.uint8, np.uint8, np.uint8], coord: tuple[np.intp, ...], size: int
 ):
+    left = max(0, coord[0] - size)
+    right = min(1023, coord[0] + size)
+    top = min(511, coord[1] + size)
+    bottom = max(0, coord[1] - size)
     for rgb in range(0, 3):
-        rgb_image[coord[0] - size, coord[1] - size : coord[1] + size, rgb] = color[rgb]
-        rgb_image[coord[0] + size, coord[1] - size : coord[1] + size, rgb] = color[rgb]
-        rgb_image[coord[0] - size : coord[0] + size, coord[1] + size, rgb] = color[rgb]
-        rgb_image[coord[0] - size : coord[0] + size, coord[1] - size, rgb] = color[rgb]
+        rgb_image[left, bottom:top, rgb] = color[rgb]
+        rgb_image[right, bottom:top, rgb] = color[rgb]
+        rgb_image[left:right, top, rgb] = color[rgb]
+        rgb_image[left:right, bottom, rgb] = color[rgb]
 
 
 def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
@@ -385,7 +453,11 @@ def stopped_stream():
     result_queues.flush()
     receive_queues.flush()
     range_doppler_info.reset()
+    count = 0
     while consumer.is_alive() and GlobalState.is_stopped():
+        count += 1
+        if count % 25 == 0:
+            logger.info("in stopped_stream")
         receive_queues.flush()
         stop_buf = STATIC_CONFIG.stopped_buf
         if not result_queues.anyfull():
@@ -399,9 +471,15 @@ def hw_stream():
     logger.debug("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
         result = None
-        if receive_queues.anyempty():
-            time.sleep(0.001)
-            continue
+        if GlobalState.model == Model.QUAD_CORNER:
+            if receive_queues.anyempty():
+                time.sleep(0.001)
+                continue
+        else:
+            if receive_queues[0].empty():
+                time.sleep(0.001)
+                continue
+
         for idx in get_result_range():
             result = receive_queues[idx].get()
             if not result_queues.anyfull():

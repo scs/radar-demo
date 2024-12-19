@@ -66,7 +66,7 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
 # Module Global Variables
 #
 
-log_level = logging.NOTSET  # NOTSET, DEBUG, INFO, WARNING, ERROR
+log_level = logging.DEBUG  # NOTSET, DEBUG, INFO, WARNING, ERROR
 
 logger = logging.getLogger(__name__)
 logger_stream = logging.StreamHandler()
@@ -277,7 +277,8 @@ def start_threads() -> None:
 def stop_threads() -> None:
     logger.debug("Entering")
     stop_producer.set()
-    # converter only stops once producer and consumer is stopped so we only need to wait for the converter
+    sender.join()
+    receiver.join()
     converter.join()
     benchmark_info.reset()
 
@@ -299,7 +300,7 @@ def flush_queues() -> None:
     flush_queue(send_queue)
     flush_queue(receive_queue)
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
-    _ = reset_fifos()
+    # _ = reset_fifos()
     logger.debug("Leaving")
 
 
