@@ -55,6 +55,12 @@ class QueueList(Generic[T]):
                 return True
         return False
 
+    def anyempty(self) -> bool:
+        for q in self.queues:
+            if q.empty():
+                return True
+        return False
+
     def __getitem__(self, idx: int) -> queue.Queue[T]:
         return self.queues[idx]
 
@@ -64,7 +70,7 @@ class QueueList(Generic[T]):
 
 
 result_queues = QueueList(num_queues=4, maxsize=2)
-send_queues = QueueList(num_queues=4, maxsize=7)
+send_queue = queue.Queue(maxsize=7)
 receive_queues = QueueList(num_queues=4, maxsize=7)
 
 stop_producer = threading.Event()
@@ -80,9 +86,14 @@ def reset_fifos() -> bool:
     return True
 
 
+def flush(q: queue.Queue[T]):
+    while not q.empty():
+        _ = q.get()
+
+
 def flush_queues() -> None:
     logger.debug("Entering")
-    send_queues.flush()
+    flush(send_queue)
     receive_queues.flush()
     result_queues.flush()
     _ = reset_fifos()
@@ -152,11 +163,15 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     logger.debug("Leaving")
 
 
-def send_scene(mode: int, step: int, emulation: int) -> bool:
+def send_scene():
     err = -1
-    if STATIC_CONFIG.versal_lib:
-        err: int = STATIC_CONFIG.versal_lib.send_scene(mode, step, emulation)
-    return err == 0
+    num_channels = 16 if GlobalState.model == Model.IMAGING else 4
+    step = GlobalState.get_current_steps()
+    for radar_idx in get_result_range():
+        if STATIC_CONFIG.versal_lib:
+            err: int = STATIC_CONFIG.versal_lib.send_scene(radar_idx, step[radar_idx], num_channels, 0)
+            if err == 0:
+                send_queue.put(step)
 
 
 def current_send_step() -> int:
@@ -169,16 +184,10 @@ def current_send_step() -> int:
 def send_radar_scene():
     timer = Timer("send_radar_scene")
     if GlobalState.has_hw():
-        mode = {Model.SHORT_RANGE: 0, Model.QUAD_CORNER: 1, Model.IMAGING: 2}
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
-                if not send_queues[0].full():
-                    send_step = current_send_step()
-                    if send_scene(mode[GlobalState.get_current_model() or Model.SHORT_RANGE], send_step, 0):
-                        timer.log_time()
-                        send_queues[0].put(send_step)
-                else:
-                    time.sleep(0.016)  # queue max size * intended frame rate
+                send_scene()
+                timer.log_time()
             else:
                 time.sleep(0.1)
     else:
@@ -188,18 +197,33 @@ def send_radar_scene():
     logger.debug("Stopping sender thread")
 
 
-def receive_radar_result() -> NDArray[np.int16]:
-    complex_result = np.empty((4, 1024, 512, 2), np.int16)
+def receive_radar_result() -> tuple[int, NDArray[np.int16]]:
+    complex_result = np.empty((1024, 512), np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
+    idx = np.array([0]).astype(np.uint32)
     if STATIC_CONFIG.versal_lib:
         err: int = STATIC_CONFIG.versal_lib.receive_result(
             complex_result.ctypes,
-            4 * 1024 * 512 * 2 * ctypes.sizeof(ctypes.c_int16),
+            idx.ctypes,
+            1024 * 512 * ctypes.sizeof(ctypes.c_int16),
             0,
         )
     timer.log_time()
-    return complex_result if err == 0 else np.zeros((4, 1024, 512)).astype(np.int16)
+    return (idx[0], complex_result) if err == 0 else (0, np.zeros((1024, 512)).astype(np.int16))
+
+
+def check_bundle_step(radar_idx: int, bundle_step: int | None, step: int) -> int:
+    if bundle_step and step != bundle_step:
+        logger.error(
+            f"Unmatched send step within bundle radar[{radar_idx}]->{step}, bundled step expected is {bundle_step}"
+        )
+    return step
+
+
+def check_expected_radar_idx(received: int, expected: int):
+    if received != expected:
+        logger.error(f"Unmatched index for expecte result expected = {expected}, actual = {received}")
 
 
 def receive_radar_result_loop():
@@ -208,11 +232,18 @@ def receive_radar_result_loop():
     while producer.is_alive():
         if GlobalState.use_hw():
             try:
-                send_step = send_queues[0].get_nowait()
-                complex_result = receive_radar_result()
-                if send_step != previous_step and not receive_queues.anyfull():
-                    receive_queues[0].put(complex_result)
-                previous_step = send_step
+                # check if any is full and only push to queue if all have room. This ensures that the queues stay in sync
+                full = receive_queues.anyfull()
+                send_step = 0
+                bundle_step: None | int = None
+                for i in get_result_range():
+                    send_step = send_queue.get_nowait()
+                    bundle_step = check_bundle_step(i, bundle_step, send_step)
+                    idx, complex_result = receive_radar_result()
+                    check_expected_radar_idx(idx, i)
+                    if send_step != previous_step and not full:
+                        receive_queues[idx].put(complex_result)
+                    previous_step = send_step
                 range_doppler_info.fps = int(1 / timer.duration())
             except queue.Empty:
                 time.sleep(0.001)
@@ -220,11 +251,10 @@ def receive_radar_result_loop():
             time.sleep(0.1)
 
     # clean up hw buffers
-
-    for q in send_queues:
-        while not q.empty():
-            _ = q.get()
-            _ = receive_radar_result()
+    # dequeue send_queue
+    while not send_queue.empty():
+        _ = send_queue.get()
+        _ = receive_radar_result()
 
     logger.debug("Stopping receiver thread")
 
@@ -242,7 +272,13 @@ def convert_to_intensity_image(complex_result: NDArray[np.int16]) -> NDArray[np.
     return intensity_images
 
 
-def heat_map(intensity_image: NDArray[np.int32]) -> NDArray[np.uint8]:
+def norm_image(image: NDArray[np.int16]) -> NDArray[np.uint8]:
+    max: np.int16 = np.amax(image)
+    norm_image = image / max * 255
+    return norm_image.astype(np.uint8)
+
+
+def heat_map(intensity_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
     timer = Timer(name="heat_map")
     flipped = np.flip(intensity_image, axis=0)
     img = np.empty((*flipped.shape, 3), dtype=np.uint8)
@@ -315,7 +351,7 @@ def create_frame(rgb_array: NDArray[np.uint8]):
     return frame
 
 
-def synthetic_result(current_step: int, channel: int) -> NDArray[np.int32]:
+def synthetic_result(current_step: int, channel: int) -> NDArray[np.uint8]:
     logger.debug("Entering")
     timer = Timer(name="synthetic_result")
     phase: NDArray[np.float32] = 2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
@@ -331,7 +367,7 @@ def synthetic_result(current_step: int, channel: int) -> NDArray[np.int32]:
     norm_intensity_image = np.power(1 - norm_dist_from_center, 24)
     intensity_image = norm_intensity_image * 255
     noise = np.random.randint(1, 32, intensity_image.shape, dtype=np.uint8)
-    intensity_image = np.clip(intensity_image + noise, 0, 255).astype(np.int32)
+    intensity_image = np.clip(intensity_image + noise, 0, 255).astype(np.uint8)
     timer.log_time()
     logger.debug("Leaving")
     return intensity_image
@@ -362,21 +398,22 @@ def stopped_stream():
 def hw_stream():
     logger.debug("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
-        results = None
-        try:
-            results = receive_queues[0].get_nowait()
+        result = None
+        if receive_queues.anyempty():
+            time.sleep(0.001)
+            continue
+        for idx in get_result_range():
+            result = receive_queues[idx].get()
             if not result_queues.anyfull():
-                if results.shape != (4, 1024, 512, 2):
+                if result.shape != (1024, 512):
                     logger.error(
-                        f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {results.shape}"
+                        f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {result.shape}"
                     )
                     continue
-                intensity_images = convert_to_intensity_image(complex_result=results)
-                for result_idx in get_result_range():
-                    frame = cfar(heat_map(intensity_images[result_idx, ...]))
-                    result_queues[result_idx].put(create_frame(frame))
-        except queue.Empty:
-            time.sleep(0.001)
+                normed_image = norm_image(result)
+                if not result_queues[idx].full():
+                    frame = create_frame(cfar(heat_map(normed_image)))
+                    result_queues[idx].put(frame)
     logger.debug("Leaving")
 
 
