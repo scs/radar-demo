@@ -8,7 +8,8 @@ from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
 from app.logic.model import Model
-from app.logic.settings import ComputePlatform, SettingLabel, Settings, get_number_of_ai_elements
+from app.logic.settings import (ComputePlatform, SettingLabel, Settings,
+                                get_number_of_ai_elements)
 from app.logic.state import GlobalState
 
 WIN_SIZE = 20
@@ -105,7 +106,7 @@ class HwInfo(ABC):
 @dataclass
 class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
-    ffts_emulation: NDArray[np.int32] = np.zeros(1000).astype(np.int32)
+    ffts_emulation: NDArray[np.int32] = field(default_factory=lambda: np.zeros(1000).astype(np.int32))
 
     def reset(self):  # pyright: ignore [reportImplicitOverride]
         self.frame_rate: NDArray[np.int32] = np.zeros(100).astype(np.int32)

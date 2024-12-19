@@ -26,7 +26,9 @@ matplotlib.use("agg")
 def get_current_phase(samples: int) -> NDArray[np.float32]:
     current_step = GlobalState.get_current_steps()[0]
     border = 20
-    position: int = abs((STATIC_CONFIG.number_of_steps_in_period[0] / 2) - current_step)
+    half_pattern = [*range(0, int(STATIC_CONFIG.number_of_steps_in_period[0] / 2))]
+    pattern = half_pattern + half_pattern[::-1]
+    position = pattern[current_step]
     offseted_position: int = (
         STATIC_CONFIG.number_of_steps_in_period[0]
         + border
@@ -78,7 +80,7 @@ logger.propagate = False
 
 send_queue: queue.Queue[int] = queue.Queue(maxsize=7)
 receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
-result_queue = queue.Queue(maxsize=7)
+result_queue = queue.Queue(maxsize=2)
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
 
@@ -169,8 +171,9 @@ def receive_data():
             try:
                 _ = send_queue.get_nowait()
                 fft_data = receive_result()
-                receive_queue.put(fft_data)
                 count = count + 1
+                if not receive_queue.full():
+                    receive_queue.put(fft_data)
             except queue.Empty:
                 time.sleep(0.001)
                 pass
@@ -199,7 +202,7 @@ def hw_stream():
         fft_data = None
         while not receive_queue.empty():
             fft_data = receive_queue.get()
-        if fft_data is not None:
+        if fft_data is not None and not result_queue.full():
             plot_timer = Timer(name="Plot")
             real: NDArray[np.float32] = fft_data[..., 0].astype(np.float32)
             imag: NDArray[np.float32] = fft_data[..., 1].astype(np.float32)
@@ -220,7 +223,8 @@ def sw_stream():
         benchmark_info.set_ffts_emulation(int(1 / fft_timer.duration()))
         fft_data = np.abs(fft_data) * SAMPLES
         fft_data = fft_data / np.max(fft_data)
-        result_queue.put(create_frame(fft_data))
+        if not result_queue.full():
+            result_queue.put(create_frame(fft_data))
     logger.debug("Leaving")
 
 
@@ -232,7 +236,8 @@ def stopped_stream():
         flush_queue(receive_queue)
         benchmark_info.reset()
         frame = STATIC_CONFIG.stopped_buf
-        result_queue.put(frame)
+        if not result_queue.full():
+            result_queue.put(frame)
         time.sleep(0.04)
     logger.debug("Entering")
 

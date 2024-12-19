@@ -49,6 +49,12 @@ class QueueList(Generic[T]):
             while not q.empty():
                 _ = q.get()
 
+    def anyfull(self) -> bool:
+        for q in self.queues:
+            if q.full():
+                return True
+        return False
+
     def __getitem__(self, idx: int) -> queue.Queue[T]:
         return self.queues[idx]
 
@@ -57,9 +63,9 @@ class QueueList(Generic[T]):
             yield q
 
 
-result_queues = QueueList(4)
-send_queues = QueueList(4, 7)
-receive_queues = QueueList(4, 7)
+result_queues = QueueList(num_queues=4, maxsize=2)
+send_queues = QueueList(num_queues=4, maxsize=7)
+receive_queues = QueueList(num_queues=4, maxsize=7)
 
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
@@ -204,7 +210,7 @@ def receive_radar_result_loop():
             try:
                 send_step = send_queues[0].get_nowait()
                 complex_result = receive_radar_result()
-                if send_step != previous_step:
+                if send_step != previous_step and not receive_queues.anyfull():
                     receive_queues[0].put(complex_result)
                 previous_step = send_step
                 range_doppler_info.fps = int(1 / timer.duration())
@@ -342,12 +348,13 @@ def stopped_stream():
     logger.debug("Entering")
     result_queues.flush()
     receive_queues.flush()
+    range_doppler_info.reset()
     while consumer.is_alive() and GlobalState.is_stopped():
         receive_queues.flush()
-        range_doppler_info.reset()
         stop_buf = STATIC_CONFIG.stopped_buf
-        for result_idx in get_result_range():
-            result_queues[result_idx].put(stop_buf)
+        if not result_queues.anyfull():
+            for result_idx in get_result_range():
+                result_queues[result_idx].put(stop_buf)
         time.sleep(0.04)
     logger.debug("Leaving")
 
@@ -356,22 +363,18 @@ def hw_stream():
     logger.debug("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
         results = None
-        # if the sw is to slow pop some frames from the receive queue
-        for _ in range(receive_queues[0].qsize() // 2):
-            _ = receive_queues[0].get()
-
-        # if not radar_receive_queue.empty():
         try:
             results = receive_queues[0].get_nowait()
-            if results.shape != (4, 1024, 512, 2):
-                logger.error(
-                    f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {results.shape}"
-                )
-                continue
-            intensity_images = convert_to_intensity_image(complex_result=results)
-            for result_idx in get_result_range():
-                frame = cfar(heat_map(intensity_images[result_idx, ...]))
-                result_queues[result_idx].put(create_frame(frame))
+            if not result_queues.anyfull():
+                if results.shape != (4, 1024, 512, 2):
+                    logger.error(
+                        f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {results.shape}"
+                    )
+                    continue
+                intensity_images = convert_to_intensity_image(complex_result=results)
+                for result_idx in get_result_range():
+                    frame = cfar(heat_map(intensity_images[result_idx, ...]))
+                    result_queues[result_idx].put(create_frame(frame))
         except queue.Empty:
             time.sleep(0.001)
     logger.debug("Leaving")
@@ -380,12 +383,13 @@ def hw_stream():
 def sw_stream():
     logger.debug("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and not GlobalState.use_hw():
-        for idx in get_result_range():
-            image = synthetic_result(GlobalState.get_current_steps()[idx], idx)
-            rgb_image = heat_map(image)
-            rgb_image = cfar(rgb_image)
-            frame = create_frame(rgb_image)
-            result_queues[idx].put(frame)
+        if not result_queues.anyfull():
+            for idx in get_result_range():
+                image = synthetic_result(GlobalState.get_current_steps()[idx], idx)
+                rgb_image = heat_map(image)
+                rgb_image = cfar(rgb_image)
+                frame = create_frame(rgb_image)
+                result_queues[idx].put(frame)
     logger.debug("Leaving")
 
 
