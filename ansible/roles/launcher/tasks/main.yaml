@@ -14,8 +14,7 @@
       cd {{ playbook_dir }}/../backend || exit 1
       python3 run.py &
       server_pid=$!
-      sleep 10
-      chromium-browser --app=http://127.0.0.1:5000 --start-fullscreen
+      google-chrome --app=http://127.0.0.1:5000 --password-store=basic --start-fullscreen
       kill $server_pid
     dest: ~/start_demo.sh
     mode: '0755'
