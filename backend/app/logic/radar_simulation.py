@@ -196,6 +196,8 @@ def send_scene():
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
     step = GlobalState.get_current_steps()
     uid = MODEL_LOOKUP[GlobalState.model.value]
+    while not send_queue.empty():
+        time.sleep(0.01)
     for idx in get_result_range():
         logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
         if STATIC_CONFIG.versal_lib:
