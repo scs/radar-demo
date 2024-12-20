@@ -22,6 +22,7 @@
     - role: socat
     - role: grub
     - role: google-chrome
+    - role: network_config
   tasks:
     - name: Install System Packages
       become: true

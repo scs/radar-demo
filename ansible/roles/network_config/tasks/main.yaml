@@ -1,0 +1,3 @@
+- name: Create network manager config for usb network device
+  become: true
+  ansible.builtin.script: create_nmconnection.py
