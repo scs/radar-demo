@@ -21,6 +21,7 @@
     - role: radardemo_py_infra
     - role: socat
     - role: grub
+    - role: google-chrome
   tasks:
     - name: Install System Packages
       become: true
