@@ -113,10 +113,10 @@ def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
     logger.debug("Leaving")
 
 
-def reset_fifos() -> bool:
+def flush_card(timeout_ms: int) -> bool:
     logger.debug("Entering")
     if STATIC_CONFIG.versal_lib:
-        err = STATIC_CONFIG.versal_lib.reset_hw()
+        err = STATIC_CONFIG.versal_lib.flush(timeout_ms)
         return err == 0
     logger.debug("Leaving")
     return True
@@ -300,7 +300,7 @@ def flush_queues() -> None:
     flush_queue(send_queue)
     flush_queue(receive_queue)
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
-    # _ = reset_fifos()
+    _ = flush_card(500)
     logger.debug("Leaving")
 
 
