@@ -69,7 +69,7 @@ class GlobalState:
             cls.settings.disable_hw()
 
         cls.running_state = RunningState.STOPPED
-        cls.page_state = PageState.ENTERED
+        cls.page_state = PageState.LEFT
         cls.current_steps = [0, 0, 0, 0]
 
         cls.current_positions = np.vectorize(compute_position, signature="(),(n),(n)->()")(
@@ -212,6 +212,10 @@ class GlobalState:
     @classmethod
     def set_left_page(cls):
         cls.page_state = PageState.LEFT
+
+    @classmethod
+    def set_entered_page(cls):
+        cls.page_state = PageState.ENTERED
 
     @classmethod
     def left_page(cls) -> bool:
