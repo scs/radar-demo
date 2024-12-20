@@ -81,8 +81,13 @@ def leave_page():
         return "", 200
 
     GlobalState.set_leaving_page()
+    timeout = 0
+
     while GlobalState.leaving_page():
         sleep(0.01)
+        timeout += 1
+        if timeout == 100:
+            break
     return "", 200
 
 

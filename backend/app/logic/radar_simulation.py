@@ -25,7 +25,7 @@ from app.logic.timer import Timer
 #######################################################################################################################
 # Module Global Variables
 #
-log_level = logging.DEBUG  # NOTSET, DEBUG, INFO, WARNING, ERROR
+log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
 
 
 class CustomFormatter(logging.Formatter):
@@ -172,9 +172,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     stop_producer.clear()
     start_threads(idx)
 
-    counter = 0
     while not GlobalState.leaving_page():
-        counter += 1
         try:
             frame = result_queues[idx].get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
@@ -182,11 +180,13 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
             time.sleep(0.001)
             continue
 
-    logger.debug(f"Stopping threads {GlobalState.get_current_model()}")
+    logger.debug(f"[{idx}] Stopping threads {GlobalState.get_current_model()}")
     stop_threads(idx)
     gen_frames_state[idx].clear()
     if idx == 0:
         while any([x.is_set() for x in gen_frames_state]):
+            for i,s in enumerate(gen_frames_state):
+                print(f"state is set of [{i}] = {s.is_set()}")
             time.sleep(0.001)
         GlobalState.set_left_page()
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
@@ -269,11 +269,9 @@ def receive_radar_result_loop():
     logger.debug("Entering")
     timer = Timer(name="receive loop")
     previous_step = -1
+    INTEGRATION_TIME = 50
     count = 0
     while producer.is_alive():
-        count += 1
-        if count % 50 == 0:
-            logger.info(f"Producer is alive = {producer.is_alive()}")
         if GlobalState.use_hw():
             try:
                 # check if any is full and only push to queue if all have room. This ensures that the queues stay in sync
@@ -285,6 +283,9 @@ def receive_radar_result_loop():
                     logger.debug(f"receiving step {send_step} radar_idx = {i}")
                     bundle_step = check_bundle_step(i, bundle_step, send_step)
                     idx, uid, complex_result = receive_radar_result()
+                    count += 1
+                    if count % INTEGRATION_TIME == 0:
+                        range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration())
                     if uid != MODEL_LOOKUP[GlobalState.model.value]:
                         logger.error(f"UID model:{uid} current model is {MODEL_LOOKUP[GlobalState.model.value]}")
                     check_expected_radar_idx(idx, i)
@@ -292,7 +293,6 @@ def receive_radar_result_loop():
                         logger.debug(f"pushing to receive_queue[{idx}]")
                         receive_queues[i].put(complex_result)
                 previous_step = send_step
-                range_doppler_info.fps = int(1 / timer.duration())
                 # logger.info("SUCCESSFULL RECEIVED RESULT")
             except queue.Empty:
                 time.sleep(0.001)
