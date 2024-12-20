@@ -103,9 +103,9 @@ mutex_lock = threading.Lock()
 #######################################################################################################################
 
 
-def reset_fifos() -> bool:
+def flush_card(timeout_ms: int) -> bool:
     if STATIC_CONFIG.versal_lib:
-        err = STATIC_CONFIG.versal_lib.reset_hw()
+        err = STATIC_CONFIG.versal_lib.flush(timeout_ms)
         return err == 0
     return True
 
@@ -120,7 +120,7 @@ def flush_queues() -> None:
     flush(send_queue)
     receive_queues.flush()
     result_queues.flush()
-    # _ = reset_fifos()
+    _ = flush_card(400)
     logger.debug("Leaving")
 
 
