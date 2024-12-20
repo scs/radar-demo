@@ -306,6 +306,7 @@ def flush_queues() -> None:
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
     logger.debug("Entering")
+    GlobalState.set_entered_page()
     stop_producer.clear()
     start_threads()
     loop_timer = Timer("benchmark")

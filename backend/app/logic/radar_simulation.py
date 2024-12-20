@@ -99,6 +99,8 @@ receive_queues = QueueList(num_queues=4, maxsize=2)
 
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
+
+gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), threading.Event()]
 #
 #######################################################################################################################
 
@@ -164,12 +166,8 @@ def stop_threads(idx: int) -> None:
 
 def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]
     logger.debug(f"Entering GEN FRAMES with idx = {idx}")
-    while GlobalState.get_current_model() not in [
-        Model.SHORT_RANGE,
-        Model.QUAD_CORNER,
-        Model.IMAGING,
-    ]:
-        time.sleep(0.001)
+    gen_frames_state[idx].set()
+    GlobalState.set_entered_page()
 
     stop_producer.clear()
     start_threads(idx)
@@ -186,7 +184,10 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
 
     logger.debug(f"Stopping threads {GlobalState.get_current_model()}")
     stop_threads(idx)
+    gen_frames_state[idx].clear()
     if idx == 0:
+        while any([x.is_set() for x in gen_frames_state]):
+            time.sleep(0.001)
         GlobalState.set_left_page()
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 

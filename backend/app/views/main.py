@@ -31,9 +31,11 @@ def frame_number() -> Response:
 def video_feed(idx: int) -> Response:
     return Response(gen_radar_frames(idx), mimetype="multipart/x-mixed-replace; boundary=frame")
 
+
 @app.route("/imaging_feed")
 def imaging_feed() -> Response:
     return Response(gen_radar_frames(0), mimetype="multipart/x-mixed-replace; boundary=frame")
+
 
 @app.route("/short_range_feed")
 def short_range_feed() -> Response:
@@ -75,6 +77,9 @@ def init_new_model():
 
 @app.route("/leavePage", methods=["Get"])
 def leave_page():
+    if GlobalState.left_page():
+        return "", 200
+
     GlobalState.set_leaving_page()
     while GlobalState.leaving_page():
         sleep(0.01)
