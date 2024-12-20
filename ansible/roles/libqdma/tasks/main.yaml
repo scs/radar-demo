@@ -17,12 +17,12 @@
 - name: "Compile libqdma for Kernel {{ kernel }}"
   become: false
   ansible.builtin.command:
-    cmd: make KSRC=/lib/modules/{{ kernel }}-generic/build KOBJ=/lib/modules/{{ kernel }}-generic/build
+    cmd: make
     chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
   when: libqdma.changed
 - name: "Install qdma modules for Kernel {{ kernel }}"
   become: true
   ansible.builtin.command:
-    cmd: make install KSRC=/lib/modules/{{ kernel }}-generic/build KOBJ=/lib/modules/{{ kernel }}-generic/build
+    cmd: make install
     chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
   when: libqdma.changed
