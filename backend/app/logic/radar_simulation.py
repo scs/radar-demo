@@ -94,8 +94,8 @@ class QueueList(Generic[T]):
 
 
 result_queues = QueueList(num_queues=4, maxsize=2)
-send_queue = queue.Queue(maxsize=4)
-receive_queues = QueueList(num_queues=4, maxsize=3)
+send_queue = queue.Queue()  # no max size as hw should give back pressure
+receive_queues = QueueList(num_queues=4, maxsize=2)
 
 stop_producer = threading.Event()
 mutex_lock = threading.Lock()
@@ -196,8 +196,6 @@ def send_scene():
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
     step = GlobalState.get_current_steps()
     uid = MODEL_LOOKUP[GlobalState.model.value]
-    while not send_queue.empty():
-        time.sleep(0.01)
     for idx in get_result_range():
         logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
         if STATIC_CONFIG.versal_lib:
