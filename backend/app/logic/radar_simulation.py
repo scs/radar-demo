@@ -370,27 +370,29 @@ def draw_cross(
     rgb_image: NDArray[np.uint8],
     color: tuple[np.uint8, np.uint8, np.uint8],
     coord: tuple[np.intp, ...],
-    size: int,
-    mask_size: int,
     width: int,
+    height: int,
+    mask_width: int,
+    mask_height: int,
+    weight: int,
 ):
-    if width % 2 == 0:
-        width = max(width - 1, 0)
+    if weight % 2 == 0:
+        weight = max(weight - 1, 0)
 
-    left: int = int(max(0, coord[0] - size))
-    left_box: int = int(max(0, coord[0] - mask_size))
-    right: int = int(min(1023, coord[0] + size))
-    right_box: int = int(min(1023, coord[0] + mask_size))
+    left: int = int(max(0, coord[0] - width))
+    left_box: int = int(max(0, coord[0] - mask_width))
+    right: int = int(min(1023, coord[0] + width))
+    right_box: int = int(min(1023, coord[0] + mask_width))
 
-    top: int = int(min(511, coord[1] + size))
-    top_box: int = int(min(511, coord[1] + mask_size))
-    bottom: int = int(max(0, coord[1] - size))
-    bottom_box: int = int(max(0, coord[1] - mask_size))
+    top: int = int(min(511, coord[1] + height))
+    top_box: int = int(min(511, coord[1] + mask_height))
+    bottom: int = int(max(0, coord[1] - height))
+    bottom_box: int = int(max(0, coord[1] - mask_height))
 
-    width_left: int = int(max(0, coord[0] - width))
-    width_right: int = int(min(1023, coord[0] + width))
-    width_bottom: int = int(max(0, coord[1] - width))
-    width_top: int = int(min(511, coord[1] + width))
+    width_left: int = int(max(0, coord[0] - weight))
+    width_right: int = int(min(1023, coord[0] + weight))
+    width_bottom: int = int(max(0, coord[1] - weight))
+    width_top: int = int(min(511, coord[1] + weight))
 
     for rgb in range(0, 3):
         rgb_image[left:left_box, width_bottom:width_top, rgb] = color[rgb]
@@ -404,20 +406,25 @@ def draw_box(
     rgb_image: NDArray[np.uint8],
     color: tuple[np.uint8, np.uint8, np.uint8],
     coord: tuple[np.intp, ...],
-    size: int,
     width: int,
+    height: int,
+    weight: int,
 ):
-    for i in range(0, width):
-        _draw_box(rgb_image, color, coord, size + i)
+    for i in range(0, weight):
+        _draw_box(rgb_image, color, coord, width + i, height + i)
 
 
 def _draw_box(
-    rgb_image: NDArray[np.uint8], color: tuple[np.uint8, np.uint8, np.uint8], coord: tuple[np.intp, ...], size: int
+    rgb_image: NDArray[np.uint8],
+    color: tuple[np.uint8, np.uint8, np.uint8],
+    coord: tuple[np.intp, ...],
+    width: int,
+    height: int,
 ):
-    left: int = int(max(0, coord[0] - size))
-    right: int = int(min(1023, coord[0] + size))
-    top: int = int(min(511, coord[1] + size))
-    bottom: int = int(max(0, coord[1] - size))
+    left: int = int(max(0, coord[0] - width))
+    right: int = int(min(1023, coord[0] + width))
+    top: int = int(min(511, coord[1] + height))
+    bottom: int = int(max(0, coord[1] - height))
     for rgb in range(0, 3):
         rgb_image[left, bottom:top, rgb] = color[rgb]
         rgb_image[right, bottom:top, rgb] = color[rgb]
@@ -431,13 +438,15 @@ def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
         shape_coord: tuple[np.intp, ...] = np.unravel_index(coord, rgb_image[..., 0].shape)
         red: tuple[np.uint8, np.uint8, np.uint8] = (np.uint8(255), np.uint8(0), np.uint8(0))
         if GlobalState.model == Model.QUAD_CORNER:
-            size = 10
-            width = 1
+            width = 5
+            height = 10
+            weight = 1
         else:
-            size = 5
-            width = 2
-        draw_box(rgb_image, red, shape_coord, size, width)
-        draw_cross(rgb_image, red, shape_coord, 3 * size, size, width)
+            width = 3
+            height = 6
+            weight = 2
+        draw_box(rgb_image, red, shape_coord, width, height, weight)
+        draw_cross(rgb_image, red, shape_coord, 3 * width, 3 * height, width, height, weight)
     return rgb_image
 
 
