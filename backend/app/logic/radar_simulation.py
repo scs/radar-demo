@@ -185,7 +185,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     gen_frames_state[idx].clear()
     if idx == 0:
         while any([x.is_set() for x in gen_frames_state]):
-            for i,s in enumerate(gen_frames_state):
+            for i, s in enumerate(gen_frames_state):
                 print(f"state is set of [{i}] = {s.is_set()}")
             time.sleep(0.001)
         GlobalState.set_left_page()
