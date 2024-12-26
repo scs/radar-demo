@@ -437,7 +437,7 @@ def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
     return rgb_image
 
 
-def create_frame(rgb_array: NDArray[np.uint8]) -> memoryview[int]:
+def create_frame(rgb_array: NDArray[np.uint8]):
     timer: Timer = Timer(name="create_frame")
     buf: BytesIO = BytesIO()
     image: Image.Image = Image.fromarray(rgb_array, "RGB")
