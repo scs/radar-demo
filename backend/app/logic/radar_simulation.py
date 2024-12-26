@@ -373,20 +373,20 @@ def draw_cross(
     if width % 2 == 0:
         width = max(width - 1, 0)
 
-    left = max(0, coord[0] - size)
-    left_box = max(0, coord[0] - mask_size)
-    right = min(1023, coord[0] + size)
-    right_box = min(1023, coord[0] + mask_size)
+    left: int = int(max(0, coord[0] - size))
+    left_box: int = int(max(0, coord[0] - mask_size))
+    right: int = int(min(1023, coord[0] + size))
+    right_box: int = int(min(1023, coord[0] + mask_size))
 
-    top = min(511, coord[1] + size)
-    top_box = min(511, coord[1] + mask_size)
-    bottom = max(0, coord[1] - size)
-    bottom_box = max(0, coord[1] - mask_size)
+    top: int = int(min(511, coord[1] + size))
+    top_box: int = int(min(511, coord[1] + mask_size))
+    bottom: int = int(max(0, coord[1] - size))
+    bottom_box: int = int(max(0, coord[1] - mask_size))
 
-    width_left = max(0, coord[0] - width)
-    width_right = min(1023, coord[0] + width)
-    width_bottom = max(0, coord[1] - width)
-    width_top = min(511, coord[1] + width)
+    width_left: int = int(max(0, coord[0] - width))
+    width_right: int = int(min(1023, coord[0] + width))
+    width_bottom: int = int(max(0, coord[1] - width))
+    width_top: int = int(min(511, coord[1] + width))
 
     for rgb in range(0, 3):
         rgb_image[left:left_box, width_bottom:width_top, rgb] = color[rgb]
@@ -410,10 +410,10 @@ def draw_box(
 def _draw_box(
     rgb_image: NDArray[np.uint8], color: tuple[np.uint8, np.uint8, np.uint8], coord: tuple[np.intp, ...], size: int
 ):
-    left = max(0, coord[0] - size)
-    right = min(1023, coord[0] + size)
-    top = min(511, coord[1] + size)
-    bottom = max(0, coord[1] - size)
+    left: int = int(max(0, coord[0] - size))
+    right: int = int(min(1023, coord[0] + size))
+    top: int = int(min(511, coord[1] + size))
+    bottom: int = int(max(0, coord[1] - size))
     for rgb in range(0, 3):
         rgb_image[left, bottom:top, rgb] = color[rgb]
         rgb_image[right, bottom:top, rgb] = color[rgb]
@@ -433,22 +433,22 @@ def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
     return rgb_image
 
 
-def create_frame(rgb_array: NDArray[np.uint8]):
-    timer = Timer(name="create_frame")
-    buf = BytesIO()
-    image = Image.fromarray(rgb_array, "RGB")
+def create_frame(rgb_array: NDArray[np.uint8]) -> memoryview[int]:
+    timer: Timer = Timer(name="create_frame")
+    buf: BytesIO = BytesIO()
+    image: Image.Image = Image.fromarray(rgb_array, "RGB")
     image.save(buf, "JPEG")
-    frame = buf.getbuffer()
+    frame: memoryview[int] = buf.getbuffer()
     timer.log_time()
     return frame
 
 
 def synthetic_result(current_step: int, channel: int) -> NDArray[np.uint8]:
     logger.debug("Entering")
-    timer = Timer(name="synthetic_result")
+    timer: Timer = Timer(name="synthetic_result")
     phase: NDArray[np.float32] = 2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
-    ypos = int((np.cos(phase + np.pi) * 0.9 + 1) / 2 * 1023)
-    xpos = 511 + int(
+    ypos: int = int((np.cos(phase + np.pi) * 0.9 + 1) / 2 * 1023)
+    xpos: int = 511 + int(
         (np.sin(phase)) * 480 / (STATIC_CONFIG.period_in_seconds[channel] / (STATIC_CONFIG.period_in_seconds[0] - 0.5))
     )
 
@@ -472,7 +472,7 @@ def get_result_range() -> range:
         return range(0, 4)
 
 
-def stopped_stream():
+def stopped_stream() -> None:
     logger.debug("Entering")
     result_queues.flush()
     receive_queues.flush()
@@ -483,7 +483,7 @@ def stopped_stream():
         if count % 25 == 0:
             logger.info("in stopped_stream")
         receive_queues.flush()
-        stop_buf = STATIC_CONFIG.stopped_buf
+        stop_buf: memoryview[int] = STATIC_CONFIG.stopped_buf
         if not result_queues.anyfull():
             for result_idx in get_result_range():
                 result_queues[result_idx].put(stop_buf)
@@ -494,7 +494,6 @@ def stopped_stream():
 def hw_stream():
     logger.debug("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
-        result = None
         if GlobalState.model == Model.QUAD_CORNER:
             if receive_queues.anyempty():
                 time.sleep(0.001)
@@ -505,7 +504,7 @@ def hw_stream():
                 continue
 
         for idx in get_result_range():
-            result = receive_queues[idx].get()
+            result: NDArray[np.int16] = receive_queues[idx].get()
             if not result_queues.anyfull():
                 if result.shape != (1024, 512):
                     logger.error(
