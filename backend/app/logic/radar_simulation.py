@@ -370,66 +370,66 @@ def draw_cross(
     rgb_image: NDArray[np.uint8],
     color: tuple[np.uint8, np.uint8, np.uint8],
     coord: tuple[np.intp, ...],
-    width: int,
     height: int,
-    mask_width: int,
+    width: int,
     mask_height: int,
+    mask_width: int,
     weight: int,
 ):
     if weight % 2 == 0:
         weight = max(weight - 1, 0)
 
-    left: int = int(max(0, coord[0] - width))
-    left_box: int = int(max(0, coord[0] - mask_width))
-    right: int = int(min(1023, coord[0] + width))
-    right_box: int = int(min(1023, coord[0] + mask_width))
+    bottom: int = int(max(0, coord[0] - height))
+    bottom_box: int = int(max(0, coord[0] - mask_height))
+    top: int = int(min(1023, coord[0] + height))
+    top_box: int = int(min(1023, coord[0] + mask_height))
 
-    top: int = int(min(511, coord[1] + height))
-    top_box: int = int(min(511, coord[1] + mask_height))
-    bottom: int = int(max(0, coord[1] - height))
-    bottom_box: int = int(max(0, coord[1] - mask_height))
+    left: int = int(min(511, coord[1] + width))
+    left_box: int = int(min(511, coord[1] + mask_width))
+    right: int = int(max(0, coord[1] - width))
+    right_box: int = int(max(0, coord[1] - mask_width))
 
-    width_left: int = int(max(0, coord[0] - weight))
-    width_right: int = int(min(1023, coord[0] + weight))
-    width_bottom: int = int(max(0, coord[1] - weight))
-    width_top: int = int(min(511, coord[1] + weight))
+    width_bottom_: int = int(max(0, coord[0] - weight))
+    width_top_: int = int(min(1023, coord[0] + weight))
+    width_left: int = int(max(0, coord[1] - weight))
+    width_right: int = int(min(511, coord[1] + weight))
 
     for rgb in range(0, 3):
-        rgb_image[left:left_box, width_bottom:width_top, rgb] = color[rgb]
-        rgb_image[right_box:right, width_bottom:width_top, rgb] = color[rgb]
+        rgb_image[bottom:bottom_box, width_left:width_right, rgb] = color[rgb]
+        rgb_image[top_box:top, width_left:width_right, rgb] = color[rgb]
 
-        rgb_image[width_left:width_right, bottom:bottom_box, rgb] = color[rgb]
-        rgb_image[width_left:width_right, top_box:top, rgb] = color[rgb]
+        rgb_image[width_bottom_:width_top_, right:right_box, rgb] = color[rgb]
+        rgb_image[width_bottom_:width_top_, left_box:left, rgb] = color[rgb]
 
 
 def draw_box(
     rgb_image: NDArray[np.uint8],
     color: tuple[np.uint8, np.uint8, np.uint8],
     coord: tuple[np.intp, ...],
-    width: int,
     height: int,
+    width: int,
     weight: int,
 ):
     for i in range(0, weight):
-        _draw_box(rgb_image, color, coord, width + i, height + i)
+        _draw_box(rgb_image, color, coord, height + i, width + i)
 
 
 def _draw_box(
     rgb_image: NDArray[np.uint8],
     color: tuple[np.uint8, np.uint8, np.uint8],
     coord: tuple[np.intp, ...],
-    width: int,
     height: int,
+    width: int,
 ):
-    left: int = int(max(0, coord[0] - width))
-    right: int = int(min(1023, coord[0] + width))
-    top: int = int(min(511, coord[1] + height))
-    bottom: int = int(max(0, coord[1] - height))
+    bottom: int = int(max(0, coord[0] - height))
+    top: int = int(min(1023, coord[0] + height))
+    right: int = int(min(511, coord[1] + width))
+    left: int = int(max(0, coord[1] - width))
     for rgb in range(0, 3):
-        rgb_image[left, bottom:top, rgb] = color[rgb]
-        rgb_image[right, bottom:top, rgb] = color[rgb]
-        rgb_image[left:right, top, rgb] = color[rgb]
-        rgb_image[left:right, bottom, rgb] = color[rgb]
+        rgb_image[bottom, left:right, rgb] = color[rgb]
+        rgb_image[top, left:right, rgb] = color[rgb]
+        rgb_image[bottom:top, right, rgb] = color[rgb]
+        rgb_image[bottom:top, left, rgb] = color[rgb]
 
 
 def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
@@ -445,8 +445,8 @@ def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
             width = 3
             height = 6
             weight = 2
-        draw_box(rgb_image, red, shape_coord, width, height, weight)
-        draw_cross(rgb_image, red, shape_coord, 3 * width, 3 * height, width, height, weight)
+        draw_box(rgb_image, red, shape_coord, height, width, weight)
+        draw_cross(rgb_image, red, shape_coord, 3 * height, 3 * width, height, width, weight)
     return rgb_image
 
 
