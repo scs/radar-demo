@@ -280,7 +280,7 @@ def check_bundle_step(radar_idx: int, send_step: int, bundle_step: int) -> int:
 
 
 def update_status(timer: Timer, count: int) -> None:
-    INTEGRATION_TIME = 12 * 4
+    INTEGRATION_TIME = 2 * 4
     if count % INTEGRATION_TIME == 0:
         range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration() / get_result_range().stop)
 
