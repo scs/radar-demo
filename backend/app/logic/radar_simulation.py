@@ -425,9 +425,13 @@ def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
     if GlobalState.cfar_enabled():
         coord = np.argmax(rgb_image[..., 0])
         shape_coord: tuple[np.intp, ...] = np.unravel_index(coord, rgb_image[..., 0].shape)
-        red = (np.uint8(255), np.uint8(0), np.uint8(0))
-        size = 5
-        width = 2
+        red: tuple[np.uint8, np.uint8, np.uint8] = (np.uint8(255), np.uint8(0), np.uint8(0))
+        if GlobalState.model == Model.QUAD_CORNER:
+            size = 10
+            width = 1
+        else:
+            size = 5
+            width = 2
         draw_box(rgb_image, red, shape_coord, size, width)
         draw_cross(rgb_image, red, shape_coord, 3 * size, size, width)
     return rgb_image
