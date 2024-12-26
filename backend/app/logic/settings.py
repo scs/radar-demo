@@ -217,7 +217,7 @@ batch_size_setting = Setting(
         ValueMap(label="16384", availableOptions=[]),
     ],
     allOptions=[],
-    selected=Selected(type="1024", option=None),
+    selected=Selected(type="16384", option=None),
 )
 
 cfar_setting = Setting(
