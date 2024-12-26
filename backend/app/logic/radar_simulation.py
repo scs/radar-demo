@@ -252,10 +252,10 @@ def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
     )
 
 
-def check_received_meta_data(iteration_idx: int, radar_idx: int, uid: int, send_step: int, ref_step: int) -> None:
+def check_received_meta_data(iteration_idx: int, radar_idx: int, uid: int, send_step: int, bundle_step: int) -> int:
     check_expected_radar_idx(radar_idx, iteration_idx)
     check_expected_uid(uid)
-    check_bundle_step(radar_idx, send_step, ref_step)
+    return check_bundle_step(radar_idx, send_step, bundle_step)
 
 
 def check_expected_radar_idx(received: int, iteration_idx: int) -> None:
@@ -268,12 +268,15 @@ def check_expected_uid(received: int) -> None:
         logger.error(f"UID model:{received} current model is {MODEL_LOOKUP[GlobalState.model.value]}")
 
 
-def check_bundle_step(radar_idx: int, send_step: int, bundle_step: int) -> None:
-    if radar_idx > 0:
+def check_bundle_step(radar_idx: int, send_step: int, bundle_step: int) -> int:
+    if radar_idx == 0:
+        return send_step
+    else:
         if send_step != bundle_step:
             logger.error(
                 f"Unmatched send step within bundle radar[{radar_idx}]->{send_step}, bundled step expected is {bundle_step}"
             )
+        return bundle_step
 
 
 def update_status(timer: Timer, count: int) -> None:
@@ -304,6 +307,7 @@ def receive_radar_result_loop() -> None:
     logger.debug("Entering")
     timer = Timer(name="receive loop")
     previous_step: int = -1
+    bundle_step: int = 0
     iteration_idx = 0
     full = True
     while producer.is_alive():
@@ -312,7 +316,7 @@ def receive_radar_result_loop() -> None:
                 send_step: int = send_queue.get_nowait()
 
                 radar_idx, uid, result = receive_radar_result()
-                check_received_meta_data(iteration_idx, radar_idx, uid, send_step, previous_step)
+                bundle_step = check_received_meta_data(iteration_idx, radar_idx, uid, send_step, bundle_step)
 
                 full, previous_step = enqueue_received(radar_idx, send_step, previous_step, full, result)
                 update_status(timer, iteration_idx)
