@@ -252,48 +252,71 @@ def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
     )
 
 
-def check_bundle_step(radar_idx: int, bundle_step: int | None, step: int) -> int:
-    if bundle_step and step != bundle_step:
-        logger.error(
-            f"Unmatched send step within bundle radar[{radar_idx}]->{step}, bundled step expected is {bundle_step}"
-        )
-    return step
+def check_received_meta_data(iteration_idx: int, radar_idx: int, uid: int, send_step: int, ref_step: int) -> None:
+    check_expected_radar_idx(radar_idx, iteration_idx)
+    check_expected_uid(uid)
+    check_bundle_step(radar_idx, send_step, ref_step)
 
 
-def check_expected_radar_idx(received: int, expected: int):
-    if received != expected:
-        logger.error(f"Unmatched index for expected result expected = {expected}, actual = {received}")
+def check_expected_radar_idx(received: int, iteration_idx: int) -> None:
+    if received != iteration_idx % get_result_range().stop:
+        logger.error(f"Unmatched index for expected result expected = {iteration_idx}, actual = {received}")
 
 
-def receive_radar_result_loop():
+def check_expected_uid(received: int) -> None:
+    if received != MODEL_LOOKUP[GlobalState.model.value]:
+        logger.error(f"UID model:{received} current model is {MODEL_LOOKUP[GlobalState.model.value]}")
+
+
+def check_bundle_step(radar_idx: int, send_step: int, bundle_step: int) -> None:
+    if radar_idx > 0:
+        if send_step != bundle_step:
+            logger.error(
+                f"Unmatched send step within bundle radar[{radar_idx}]->{send_step}, bundled step expected is {bundle_step}"
+            )
+
+
+def update_status(timer: Timer, count: int) -> None:
+    INTEGRATION_TIME = 12 * 4
+    if count % INTEGRATION_TIME == 0:
+        range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration() / get_result_range().stop)
+
+
+def enqueue_received(
+    radar_idx: int, send_step: int, previous_step: int, full: bool, data: NDArray[np.int16]
+) -> tuple[bool, int]:
+    # pre condition
+    if radar_idx == 0:
+        full = receive_queues.anyfull()
+
+    if not full:
+        if send_step != previous_step:
+            receive_queues[radar_idx].put(data)
+
+    # post condition
+    if radar_idx == get_result_range().stop - 1:
+        previous_step = send_step
+
+    return full, previous_step
+
+
+def receive_radar_result_loop() -> None:
     logger.debug("Entering")
     timer = Timer(name="receive loop")
-    previous_step = -1
-    INTEGRATION_TIME = 50
-    count = 0
+    previous_step: int = -1
+    iteration_idx = 0
+    full = True
     while producer.is_alive():
         if GlobalState.use_hw():
             try:
-                # check if any is full and only push to queue if all have room. This ensures that the queues stay in sync
-                full = receive_queues.anyfull()
-                send_step = -1
-                bundle_step: None | int = None
-                for i in get_result_range():
-                    send_step = send_queue.get_nowait()
-                    logger.debug(f"receiving step {send_step} radar_idx = {i}")
-                    bundle_step = check_bundle_step(i, bundle_step, send_step)
-                    idx, uid, complex_result = receive_radar_result()
-                    count += 1
-                    if count % INTEGRATION_TIME == 0:
-                        range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration())
-                    if uid != MODEL_LOOKUP[GlobalState.model.value]:
-                        logger.error(f"UID model:{uid} current model is {MODEL_LOOKUP[GlobalState.model.value]}")
-                    check_expected_radar_idx(idx, i)
-                    if send_step != previous_step and not full:
-                        logger.debug(f"pushing to receive_queue[{idx}]")
-                        receive_queues[i].put(complex_result)
-                previous_step = send_step
-                # logger.info("SUCCESSFULL RECEIVED RESULT")
+                send_step: int = send_queue.get_nowait()
+
+                radar_idx, uid, result = receive_radar_result()
+                check_received_meta_data(iteration_idx, radar_idx, uid, send_step, previous_step)
+
+                full, previous_step = enqueue_received(radar_idx, send_step, previous_step, full, result)
+                update_status(timer, iteration_idx)
+                iteration_idx += 1
             except queue.Empty:
                 time.sleep(0.001)
         else:
