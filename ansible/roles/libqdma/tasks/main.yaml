@@ -4,6 +4,7 @@
     repo: 'https://github.com/Xilinx/dma_ip_drivers.git'
     dest: /tmp/dma_ip_drivers
     depth: 1
+    version: d66f224
   register: libqdma
 - name: Apply patch for newest kernel
   become: false
