@@ -1,0 +1,28 @@
+diff --git a/QDMA/linux-kernel/Makefile b/QDMA/linux-kernel/Makefile
+index 53b933d..c6ddb39 100755
+--- a/QDMA/linux-kernel/Makefile
++++ b/QDMA/linux-kernel/Makefile
+@@ -57,7 +57,9 @@ export verbose
+ # evaluate install paths
+ ifeq ($(install_path),)
+ 	# defaults
+-	kernel_install_path ?= $(PREFIX)/lib/modules/$(utsrelease)/updates/kernel/drivers/qdma
++	ifeq ($(kernel_install_path),)
++		kernel_install_path ?= $(PREFIX)/lib/modules/$(utsrelease)/updates/kernel/drivers/qdma
++	endif
+ 	dev_install_path ?= /usr/local/include/qdma
+ 	apps_install_path ?= /usr/local/sbin
+ 	docs_install_path ?= /usr/share/man/man8
+@@ -116,9 +118,9 @@ clean:
+ 
+ .PHONY: install-mods
+ install-mods:
+-	@echo "installing kernel modules to /lib/modules/$(shell uname -r)/qdma ..."
+-	@mkdir -p -m 755 /lib/modules/$(shell uname -r)/qdma
+-	@install -v -m 644 $(bin_dir)/*.ko /lib/modules/$(shell uname -r)/qdma
++	@echo "installing kernel modules to $(kernel_install_path)/qdma ..."
++	@mkdir -p -m 755 $(kernel_install_path)/qdma
++	@install -v -m 644 $(bin_dir)/*.ko $(kernel_install_path)/qdma
+ 	@depmod -a || true
+ 
+ 

@@ -11,6 +11,11 @@
   ansible.builtin.command:
     cmd: git apply {{ playbook_dir}}/roles/libqdma/files/0001-QDMA-Add-support-for-6.4.x-kernel-version.patch
     chdir: /tmp/dma_ip_drivers
+- name: Apply patch for Makefile
+  become: false
+  ansible.builtin.command:
+    cmd: git apply {{ playbook_dir}}/roles/libqdma/files/Makefile.patch
+    chdir: /tmp/dma_ip_drivers
 - name: Install build dependencies
   become: true
   ansible.builtin.package:
@@ -23,12 +28,12 @@
 - name: "Compile libqdma for Kernel {{ kernel }}"
   become: false
   ansible.builtin.shell:
-    cmd: make KDIR=/lib/modules/{{ kernel }}-generic/build
+    cmd: make KSRC=/lib/modules/{{ kernel }}-generic/build KOBJ=/lib/modules/{{ kernel }}-generic/build
     chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
   when: libqdma.changed
 - name: "Install qdma modules for Kernel {{ kernel }}"
   become: true
   ansible.builtin.shell:
-    cmd: make install KDIR=/lib/modules/{{ kernel }}-generic/build
+    cmd: make install kernel_install_path=/lib/modules/{{ kernel }}-generic
     chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
   when: libqdma.changed
