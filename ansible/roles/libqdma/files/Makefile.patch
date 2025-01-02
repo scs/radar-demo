@@ -1,28 +1,49 @@
 diff --git a/QDMA/linux-kernel/Makefile b/QDMA/linux-kernel/Makefile
-index 53b933d..c6ddb39 100755
+index 53b933d..6a88d8b 100755
 --- a/QDMA/linux-kernel/Makefile
 +++ b/QDMA/linux-kernel/Makefile
-@@ -57,7 +57,9 @@ export verbose
+@@ -23,6 +23,7 @@ SHELL = /bin/bash
+ #
+ # makefile parameters:
+ # - KDIR/KSRC/KOBJ=, optional
++# - kernel_version
+ # - install_path=,			override all install directories
+ # - kernel_install_path=,	override install directory for kernel module
+ # - dev_install_path=,		override install directory for development headers
+@@ -57,7 +58,11 @@ export verbose
  # evaluate install paths
  ifeq ($(install_path),)
  	# defaults
 -	kernel_install_path ?= $(PREFIX)/lib/modules/$(utsrelease)/updates/kernel/drivers/qdma
-+	ifeq ($(kernel_install_path),)
++	ifeq ($(kernel_version),)
 +		kernel_install_path ?= $(PREFIX)/lib/modules/$(utsrelease)/updates/kernel/drivers/qdma
++	else
++		kernel_install_path ?= $(PREFIX)/lib/modules/$(kernel_version)/updates/kernel/drivers/qdma
 +	endif
  	dev_install_path ?= /usr/local/include/qdma
  	apps_install_path ?= /usr/local/sbin
  	docs_install_path ?= /usr/share/man/man8
-@@ -116,9 +118,9 @@ clean:
+@@ -116,10 +121,10 @@ clean:
  
  .PHONY: install-mods
  install-mods:
 -	@echo "installing kernel modules to /lib/modules/$(shell uname -r)/qdma ..."
 -	@mkdir -p -m 755 /lib/modules/$(shell uname -r)/qdma
 -	@install -v -m 644 $(bin_dir)/*.ko /lib/modules/$(shell uname -r)/qdma
+-	@depmod -a || true
 +	@echo "installing kernel modules to $(kernel_install_path)/qdma ..."
 +	@mkdir -p -m 755 $(kernel_install_path)/qdma
 +	@install -v -m 644 $(bin_dir)/*.ko $(kernel_install_path)/qdma
- 	@depmod -a || true
++	@depmod -a $(kernel_version) || true
  
  
+ .PHONY: install-apps
+@@ -178,6 +183,8 @@ help:
+ 	 echo "                             variables must be specified.";\
+ 	 echo " KDIR=<path>         - Kernel build and source path. Shortcut";\
+ 	 echo "                       for KOBJ=KSRC=<path>.";\
++	 echo " kernel_version";\
++	 echo "                     - The kernel version for installation.";\
+ 	 echo " kernel_install_path=<path>";\
+ 	 echo "                     - kernel module install path.";\
+ 	 echo " apps_install_path=<path>";\
