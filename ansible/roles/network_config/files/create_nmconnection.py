@@ -5,6 +5,7 @@ import subprocess
 def get_enx_interface_uuid():
     # Execute nmcli to list connections and grep for 'enx' prefix
     try:
+        output = subprocess.check_output(["nmcli", "device"], text=True)
         output = subprocess.check_output(
             ["nmcli", "-t", "-f", "NAME,UUID,DEVICE", "connection", "show"], text=True
         )
@@ -49,7 +50,6 @@ method=link-local
 def main():
     name, uuid, interface_name = get_enx_interface_uuid()
     if name and uuid and interface_name:
-        print(f"Found UUID: {uuid} for interface: {interface_name} with name: {name}")
         generate_yaml_file(name, uuid, interface_name)
         print("Generated network-config.yaml successfully.")
     else:
