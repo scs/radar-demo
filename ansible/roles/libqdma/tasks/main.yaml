@@ -23,12 +23,12 @@
 - name: "Compile libqdma for Kernel {{ kernel }}"
   become: false
   ansible.builtin.shell:
-    cmd: make
+    cmd: make KDIR=/lib/modules/{{ kernel }}-generic/build
     chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
   when: libqdma.changed
 - name: "Install qdma modules for Kernel {{ kernel }}"
   become: true
   ansible.builtin.shell:
-    cmd: make install
+    cmd: make install KDIR=/lib/modules/{{ kernel }}-generic/build
     chdir: /tmp/dma_ip_drivers/QDMA/linux-kernel/
   when: libqdma.changed
