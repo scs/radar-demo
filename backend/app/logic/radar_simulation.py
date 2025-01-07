@@ -25,7 +25,7 @@ from app.logic.timer import Timer
 #######################################################################################################################
 # Module Global Variables
 #
-log_level = logging.DEBUG  # NOTSET, DEBUG, INFO, WARNING, ERROR
+log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
 
 
 class CustomFormatter(logging.Formatter):

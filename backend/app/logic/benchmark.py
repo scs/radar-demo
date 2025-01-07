@@ -66,7 +66,7 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
 # Module Global Variables
 #
 
-log_level = logging.DEBUG  # NOTSET, DEBUG, INFO, WARNING, ERROR
+log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
 
 logger = logging.getLogger(__name__)
 logger_stream = logging.StreamHandler()
