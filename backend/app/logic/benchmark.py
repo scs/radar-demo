@@ -66,7 +66,7 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
 # Module Global Variables
 #
 
-log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
+log_level = logging.DEBUG  # NOTSET, DEBUG, INFO, WARNING, ERROR
 
 logger = logging.getLogger(__name__)
 logger_stream = logging.StreamHandler()
@@ -82,7 +82,6 @@ send_queue: queue.Queue[int] = queue.Queue(maxsize=7)
 receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
 result_queue = queue.Queue(maxsize=2)
 stop_producer = threading.Event()
-mutex_lock = threading.Lock()
 
 AMPLITUDE = 32
 SAMPLES = 512
@@ -260,8 +259,9 @@ def start_threads() -> None:
     global receiver
     global converter
     logger.debug("Wait for mutex")
-    locked = mutex_lock.acquire(timeout=0.1)
+    locked = GlobalState.mutex_lock.acquire(timeout=0.1)
     if locked:
+        flush_queues()
         logger.debug("Mutex aquired")
         sender = threading.Thread(target=send_data, name="sender")
         sender.start()
@@ -283,7 +283,7 @@ def stop_threads() -> None:
     benchmark_info.reset()
 
     logger.debug("Releasing mutex")
-    mutex_lock.release()
+    GlobalState.mutex_lock.release()
     logger.debug("Leaving")
 
 
@@ -306,13 +306,12 @@ def flush_queues() -> None:
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
     logger.debug("Entering")
-    GlobalState.set_entered_page()
     stop_producer.clear()
     start_threads()
     loop_timer = Timer("benchmark")
     count_bak = count
 
-    while not GlobalState.leaving_page():
+    while not GlobalState.stop_producer.is_set():
         logger.debug(f"Model == {GlobalState.get_current_model().value}")
         try:
             frame = result_queue.get_nowait()
@@ -329,4 +328,4 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
 
     stop_threads()
     logger.debug("Leaving")
-    GlobalState.set_left_page()
+    GlobalState.stop_producer.clear()

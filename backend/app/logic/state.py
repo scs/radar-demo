@@ -1,5 +1,6 @@
 # pyright: reportAny=false
 import json
+import threading
 import time
 from enum import Enum
 
@@ -45,6 +46,8 @@ class GlobalState:
     amplitudes: list[tuple[int, int, int]] = [(5, 10, 0)] * 4
     offsets: list[tuple[int, int, int]] = [(0, 0, 0)] * 4
     page_state: PageState = PageState.LEFT
+    mutex_lock: threading.Lock = threading.Lock()
+    stop_producer: threading.Event = threading.Event()
 
     @classmethod
     def to_dict(cls):

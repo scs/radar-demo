@@ -25,7 +25,7 @@ from app.logic.timer import Timer
 #######################################################################################################################
 # Module Global Variables
 #
-log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
+log_level = logging.DEBUG  # NOTSET, DEBUG, INFO, WARNING, ERROR
 
 
 class CustomFormatter(logging.Formatter):
@@ -98,11 +98,16 @@ send_queue = queue.Queue()  # no max size as hw should give back pressure
 receive_queues = QueueList(num_queues=4, maxsize=2)
 
 stop_producer = threading.Event()
-mutex_lock = threading.Lock()
+
+lock_unlock: threading.Lock = threading.Lock()
 
 gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), threading.Event()]
+
+
 #
 #######################################################################################################################
+def is_running() -> bool:
+    return GlobalState.mutex_lock.locked()
 
 
 def flush_card(timeout_ms: int) -> bool:
@@ -131,28 +136,25 @@ def start_threads(idx: int) -> None:
     global producer
     global consumer
     global converter
-    if idx == 0:
-        logger.debug("Wait for mutex")
-        locked = mutex_lock.acquire(timeout=0.1)
-        if locked:
-            flush_queues()
-            logger.debug("-- Mutex aquired --")
-            producer = threading.Thread(target=send_radar_scene, name="producer")
-            producer.start()
-            consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
-            consumer.start()
-            converter = threading.Thread(target=create_radar_result, name="converter")
-            converter.start()
-        else:
-            logger.error("!! Mutex NOT aquired!!")
+    logger.debug("Wait for mutex")
+    if GlobalState.mutex_lock.acquire(blocking=False):
+        flush_queues()
+        logger.debug(f"-- Mutex aquired for thread with id = {idx} --")
+        producer = threading.Thread(target=send_radar_scene, name="producer")
+        producer.start()
+        consumer = threading.Thread(target=receive_radar_result_loop, name="consumer")
+        consumer.start()
+        converter = threading.Thread(target=create_radar_result, name="converter")
+        converter.start()
     logger.debug(f"Leaving START THREADS with idx = {idx}")
 
 
 def stop_threads(idx: int) -> None:
-    logger.debug("Entering")
+    logger.debug(f"Entering STOP THREADS with idx = {idx}")
     stop_producer.set()
     logger.info("set stop_producer")
-    if idx == 0:
+    _ = lock_unlock.acquire()
+    if GlobalState.mutex_lock.locked():
         producer.join()
         consumer.join()
         converter.join()
@@ -160,19 +162,19 @@ def stop_threads(idx: int) -> None:
         range_doppler_info.reset()
 
         logger.debug("Releasing mutex")
-        mutex_lock.release()
+        GlobalState.mutex_lock.release()
+    lock_unlock.release()
     logger.debug("Leaving")
 
 
 def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]
     logger.debug(f"Entering GEN FRAMES with idx = {idx}")
     gen_frames_state[idx].set()
-    GlobalState.set_entered_page()
 
     stop_producer.clear()
     start_threads(idx)
 
-    while not GlobalState.leaving_page():
+    while not GlobalState.stop_producer.is_set():
         try:
             frame = result_queues[idx].get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
@@ -184,11 +186,11 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     stop_threads(idx)
     gen_frames_state[idx].clear()
     if idx == 0:
-        # while any([x.is_set() for x in gen_frames_state]):
-        #     for i, s in enumerate(gen_frames_state):
-        #         print(f"state is set of [{i}] = {s.is_set()}")
-        #     time.sleep(0.001)
-        GlobalState.set_left_page()
+        while any([x.is_set() for x in gen_frames_state]):
+            for i, s in enumerate(gen_frames_state):
+                print(f"state is set of [{i}] = {s.is_set()}")
+                time.sleep(0.001)
+        GlobalState.stop_producer.clear()
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 

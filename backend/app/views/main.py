@@ -1,3 +1,4 @@
+import logging
 from time import sleep
 from typing import Any
 
@@ -8,6 +9,44 @@ from app.logic.benchmark import gen_frames as gen_benchmark_frames
 from app.logic.radar_simulation import gen_frames as gen_radar_frames
 from app.logic.state import GlobalState
 from app.logic.status import gen_radar_data
+
+#######################################################################################################################
+# Module Global Variables
+#
+log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
+
+
+class CustomFormatter(logging.Formatter):
+
+    grey: str = "\x1b[38;20m"
+    yellow: str = "\x1b[33;20m"
+    red: str = "\x1b[31;20m"
+    bold_red: str = "\x1b[31;1m"
+    reset: str = "\x1b[0m"
+    format_str: str = "%(levelname)-8s (%(filename)-26s:%(lineno)3d:%(funcName)-30s) - %(message)s "
+
+    FORMATS: dict[int, str] = {
+        logging.DEBUG: grey + format_str + reset,
+        logging.INFO: grey + format_str + reset,
+        logging.WARNING: yellow + format_str + reset,
+        logging.ERROR: red + format_str + reset,
+        logging.CRITICAL: bold_red + format_str + reset,
+    }
+
+    def format(self, record: logging.LogRecord):  # pyright: ignore [reportImplicitOverride]
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
+logger = logging.getLogger(__name__)
+logger_stream = logging.StreamHandler()
+logger_stream.setLevel(log_level)
+# formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
+logger_stream.setFormatter(CustomFormatter())
+logger.setLevel(log_level)
+logger.addHandler(logger_stream)
+logger.propagate = False
 
 
 @app.route("/stop")
@@ -77,18 +116,19 @@ def init_new_model():
 
 @app.route("/leavePage", methods=["Get"])
 def leave_page():
-    if GlobalState.left_page():
+    if GlobalState.mutex_lock.locked():
+        GlobalState.stop_producer.set()
+        timeout = 0
+
+        while GlobalState.stop_producer.is_set():
+            sleep(0.01)
+            timeout += 1
+            if timeout == 5000:
+                logger.error("Unable to stop producer")
+                break
         return "", 200
-
-    GlobalState.set_leaving_page()
-    timeout = 0
-
-    while GlobalState.leaving_page():
-        sleep(0.01)
-        timeout += 1
-        if timeout == 100:
-            break
-    return "", 200
+    else:
+        return "", 200
 
 
 @app.route("/initApp", methods=["GET"])
