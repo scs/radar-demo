@@ -150,7 +150,7 @@ class Fft1DInfo(HwInfo):
     def fft_per_sec(self, settings: Settings) -> str:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
         if device == ComputePlatform.PC_EMULATION.value:
-            return str(int(np.mean(self.ffts_emulation)))
+            return f"{int(np.mean(self.ffts_emulation)):,}"
         else:
             return f"{self.fft_per_sec_int(settings):,}"
 
