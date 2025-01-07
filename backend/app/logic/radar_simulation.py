@@ -500,7 +500,8 @@ def stopped_stream() -> None:
     while consumer.is_alive() and GlobalState.is_stopped():
         count += 1
         if count % 25 == 0:
-            logger.info("in stopped_stream")
+            logger.debug("in stopped_stream")
+        range_doppler_info.reset_frame_rate
         receive_queues.flush()
         stop_buf: memoryview[int] = STATIC_CONFIG.stopped_buf
         if not result_queues.anyfull():

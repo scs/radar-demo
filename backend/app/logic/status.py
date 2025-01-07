@@ -108,8 +108,13 @@ class Fft1DInfo(HwInfo):
     ffts_emulation: NDArray[np.int32] = field(default_factory=lambda: np.zeros(WIN_SIZE).astype(np.int32))
 
     def reset(self):  # pyright: ignore [reportImplicitOverride]
-        self.frame_rate: NDArray[np.int32] = np.zeros(100).astype(np.int32)
+        self.frame_rate = np.zeros(100).astype(np.int32)
         self.power: float = 0
+        self.ffts_emulation = np.zeros(1000).astype(np.int32)
+
+    @property
+    def reset_frame_rate(self):  # pyright: ignore [reportImplicitOverride]
+        self.frame_rate = np.zeros(100).astype(np.int32)
         self.ffts_emulation = np.zeros(1000).astype(np.int32)
 
     def set_ffts_emulation(self, value: int):

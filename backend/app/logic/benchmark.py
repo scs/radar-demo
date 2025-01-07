@@ -233,7 +233,7 @@ def stopped_stream():
     flush_queue(receive_queue)
     while receiver.is_alive() and GlobalState.is_stopped():
         flush_queue(receive_queue)
-        benchmark_info.reset()
+        benchmark_info.reset_frame_rate
         frame = STATIC_CONFIG.stopped_buf
         if not result_queue.full():
             result_queue.put(frame)
