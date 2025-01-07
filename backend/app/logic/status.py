@@ -33,13 +33,13 @@ def gen_radar_data() -> Response:
 
 @dataclass
 class HwInfo(ABC):
-    frame_rate: list[int] = field(default_factory=lambda: [])
+    frame_rate: list[int] = field(default_factory=lambda: [0])
     power: float = 0
     temperature: float = 0
     num_aie_used: int = 1
 
     def reset(self) -> None:
-        self.frame_rate = []
+        self.frame_rate = [0]
         self.power = 0
 
     @property
@@ -55,7 +55,7 @@ class HwInfo(ABC):
 
     @property
     def reset_frame_rate(self):
-        self.frame_rate = []
+        self.frame_rate = [0]
 
     @property
     def watt(self) -> str:
@@ -105,17 +105,17 @@ class HwInfo(ABC):
 @dataclass
 class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
-    ffts_emulation: list[int] = field(default_factory=lambda: [])
+    ffts_emulation: list[int] = field(default_factory=lambda: [0])
 
     def reset(self):  # pyright: ignore [reportImplicitOverride]
-        self.frame_rate: list[int] = []
+        self.frame_rate: list[int] = [0]
         self.power: float = 0
-        self.ffts_emulation = []
+        self.ffts_emulation = [0]
 
     @property
     def reset_frame_rate(self):  # pyright: ignore [reportImplicitOverride]
-        self.frame_rate = []
-        self.ffts_emulation = []
+        self.frame_rate = [0]
+        self.ffts_emulation = [0]
 
     def set_ffts_emulation(self, value: int):
         self.ffts_emulation.append(value)
