@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 import numpy as np
 from flask import Response, jsonify
 from numpy.lib import math
-from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
 from app.logic.model import Model
@@ -34,13 +33,13 @@ def gen_radar_data() -> Response:
 
 @dataclass
 class HwInfo(ABC):
-    frame_rate: NDArray[np.int32] = field(default_factory=lambda: np.zeros(WIN_SIZE).astype(np.int32))
+    frame_rate: list[int] = field(default_factory=lambda: [])
     power: float = 0
     temperature: float = 0
     num_aie_used: int = 1
 
     def reset(self) -> None:
-        self.frame_rate = np.zeros(WIN_SIZE).astype(np.int32)
+        self.frame_rate = []
         self.power = 0
 
     @property
@@ -50,12 +49,13 @@ class HwInfo(ABC):
 
     @fps.setter
     def fps(self, value: int):
-        self.frame_rate = np.append(self.frame_rate, value)
-        self.frame_rate = np.delete(self.frame_rate, 0)
+        self.frame_rate.append(value)
+        if len(self.frame_rate) > WIN_SIZE:
+            _ = self.frame_rate.pop(0)
 
     @property
     def reset_frame_rate(self):
-        self.frame_rate = np.zeros(WIN_SIZE).astype(np.int32)
+        self.frame_rate = []
 
     @property
     def watt(self) -> str:
@@ -105,21 +105,22 @@ class HwInfo(ABC):
 @dataclass
 class Fft1DInfo(HwInfo):
     num_aie_used: int = 1
-    ffts_emulation: NDArray[np.int32] = field(default_factory=lambda: np.zeros(WIN_SIZE).astype(np.int32))
+    ffts_emulation: list[int] = field(default_factory=lambda: [])
 
     def reset(self):  # pyright: ignore [reportImplicitOverride]
-        self.frame_rate = np.zeros(100).astype(np.int32)
+        self.frame_rate: list[int] = []
         self.power: float = 0
-        self.ffts_emulation = np.zeros(1000).astype(np.int32)
+        self.ffts_emulation = []
 
     @property
     def reset_frame_rate(self):  # pyright: ignore [reportImplicitOverride]
-        self.frame_rate = np.zeros(100).astype(np.int32)
-        self.ffts_emulation = np.zeros(1000).astype(np.int32)
+        self.frame_rate = []
+        self.ffts_emulation = []
 
     def set_ffts_emulation(self, value: int):
-        self.ffts_emulation = np.append(self.ffts_emulation, value)
-        self.ffts_emulation = np.delete(self.ffts_emulation, 0)
+        self.ffts_emulation.append(value)
+        if len(self.ffts_emulation) > 1000:
+            _ = self.ffts_emulation.pop(0)
 
     def aie_usage(self, settings: Settings) -> list[int]:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
