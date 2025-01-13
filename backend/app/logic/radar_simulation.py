@@ -18,6 +18,7 @@ from PIL import Image
 from app.logic.config import STATIC_CONFIG
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import MODEL_LOOKUP, Model
+from app.logic.output_exception import OutputEmpty
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
@@ -57,7 +58,6 @@ class QueueList(Generic[T]):
 
 
 result_queues = QueueList(num_queues=4, maxsize=2)
-send_queue = queue.Queue()  # no max size as hw should give back pressure
 receive_queues = QueueList(num_queues=4, maxsize=2)
 
 stop_producer = threading.Event()
@@ -69,8 +69,6 @@ gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), thr
 
 #
 #######################################################################################################################
-def is_running() -> bool:
-    return GlobalState.mutex_lock.locked()
 
 
 def flush_card(timeout_ms: int) -> bool:
@@ -80,14 +78,8 @@ def flush_card(timeout_ms: int) -> bool:
     return True
 
 
-def flush(q: queue.Queue[T]):
-    while not q.empty():
-        _ = q.get()
-
-
 def flush_queues() -> None:
     logger.debug("Entering")
-    flush(send_queue)
     receive_queues.flush()
     result_queues.flush()
     _ = flush_card(400)
@@ -161,14 +153,11 @@ def send_scene():
     err = -1
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
     step = GlobalState.get_current_steps()
-    uid = MODEL_LOOKUP[GlobalState.model.value]
     for idx in get_result_range():
         logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
         if STATIC_CONFIG.versal_lib:
-            err: int = STATIC_CONFIG.versal_lib.send_scene(idx, uid, step[idx], num_channels, 0)
-            if err == 0:
-                send_queue.put(step[0])
-            else:
+            err: int = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
+            if err != 0:
                 logger.error("Error sending to card")
 
 
@@ -203,6 +192,9 @@ def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
     idx = ctypes.c_uint32(0)
     uid = ctypes.c_uint32(0)
     if STATIC_CONFIG.versal_lib:
+        output_ready: int = STATIC_CONFIG.versal_lib.output_ready()
+        if output_ready == 0:
+            raise OutputEmpty()
         err: int = STATIC_CONFIG.versal_lib.receive_result(
             complex_result.ctypes,
             ctypes.byref(idx),
@@ -216,10 +208,9 @@ def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
     )
 
 
-def check_received_meta_data(iteration_idx: int, radar_idx: int, uid: int, send_step: int, bundle_step: int) -> int:
+def check_received_meta_data(iteration_idx: int, radar_idx: int, step: int, bundle_step: int) -> int:
     check_expected_radar_idx(radar_idx, iteration_idx)
-    check_expected_uid(uid)
-    return check_bundle_step(radar_idx, send_step, bundle_step)
+    return check_bundle_step(radar_idx, step, bundle_step)
 
 
 def check_expected_radar_idx(received: int, iteration_idx: int) -> None:
@@ -277,26 +268,18 @@ def receive_radar_result_loop() -> None:
     while producer.is_alive():
         if GlobalState.use_hw():
             try:
-                send_step: int = send_queue.get_nowait()
-
-                radar_idx, uid, result = receive_radar_result()
-                bundle_step = check_received_meta_data(iteration_idx, radar_idx, uid, send_step, bundle_step)
+                radar_idx, send_step, result = receive_radar_result()
+                bundle_step = check_received_meta_data(iteration_idx, radar_idx, send_step, bundle_step)
 
                 full, previous_step = enqueue_received(radar_idx, send_step, previous_step, full, result)
                 update_status(timer, iteration_idx)
                 iteration_idx += 1
-            except queue.Empty:
+            except OutputEmpty:
                 time.sleep(0.001)
         else:
             time.sleep(0.1)
 
-    # clean up hw buffers
-    # dequeue send_queue
-    logger.debug("Cleaning up remaining data")
-    while not send_queue.empty():
-        _ = send_queue.get()
-        _ = receive_radar_result()
-
+    _ = flush_card(400)
     logger.debug("Leaving")
 
 

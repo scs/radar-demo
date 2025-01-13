@@ -16,6 +16,7 @@ from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
 from app.logic.logging import LogLevel, get_logger
+from app.logic.output_exception import OutputEmpty
 from app.logic.state import GlobalState
 from app.logic.status import benchmark_info
 from app.logic.timer import Timer
@@ -29,7 +30,6 @@ matplotlib.use("agg")
 
 logger = get_logger(__name__, LogLevel.WARNING)
 
-send_queue: queue.Queue[int] = queue.Queue(maxsize=7)
 receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
 result_queue = queue.Queue(maxsize=2)
 stop_producer = threading.Event()
@@ -42,6 +42,31 @@ count = 0
 
 #
 #######################################################################################################################
+
+
+class PlotSetup:
+    fig: Figure | None = None
+    line: Line2D | None = None
+    x: NDArray[np.int32] | None = None
+    maxval: float = 0
+
+    @classmethod
+    def setup_plot(cls, signal: NDArray[np.int32]) -> None:
+        x = np.arange(0, len(signal)).astype(np.int32)
+        fft_data = np.fft.fft(signal, len(signal), norm="forward")
+        fft_data = fft_data * len(signal)
+        _ = plt.ioff()
+        fig, ax = plt.subplots(figsize=(5, 5), dpi=200)
+        absval = np.abs(fft_data)
+        [line] = ax.plot(x, absval)
+        line.set_data(x, absval)
+        _ = ax.axis("off")
+        PlotSetup.fig = fig
+        PlotSetup.line = line
+        PlotSetup.maxval = np.max(absval)
+        PlotSetup.x = x
+
+
 def get_current_phase(samples: int) -> NDArray[np.float32]:
     current_step = GlobalState.get_current_steps()[0]
     border = 20
@@ -100,6 +125,9 @@ def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_siz
 def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
     logger.debug("Entering")
     if STATIC_CONFIG.versal_lib:
+        output_ready: int = STATIC_CONFIG.versal_lib.output_ready()
+        if output_ready == 0:
+            raise OutputEmpty()
         STATIC_CONFIG.versal_lib.receive_1d_fft_results(data.ctypes, size)
     logger.debug("Leaving")
 
@@ -118,26 +146,23 @@ def send_data():
     if GlobalState.has_hw():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
-                if not send_queue.full():
-                    signal = get_current_signal(SAMPLES, AMPLITUDE)
-                    data_arangement_timer = Timer(name="Data Arangement")
-                    batch_size = GlobalState.get_current_batch_size()
-                    hw_data = np.zeros((SAMPLES, 2))
-                    hw_data[..., 0] = signal.real
-                    hw_data[..., 1] = signal.imag
-                    hw_data = hw_data.astype(np.int16)
-                    data_arangement_timer.log_time()
-                    send_timer = Timer(name="PCIe Send")
-                    err = send_1d_fft_data(
-                        hw_data,
-                        2 * SAMPLES * ctypes.sizeof(ctypes.c_int16),
-                        batch_size,
-                    )
-                    if err == 0:
-                        send_queue.put(1)
-                    send_timer.log_time()
-                else:
-                    time.sleep(0.004)
+                signal = get_current_signal(SAMPLES, AMPLITUDE)
+                data_arangement_timer = Timer(name="Data Arangement")
+                batch_size = GlobalState.get_current_batch_size()
+                hw_data = np.zeros((SAMPLES, 2))
+                hw_data[..., 0] = signal.real
+                hw_data[..., 1] = signal.imag
+                hw_data = hw_data.astype(np.int16)
+                data_arangement_timer.log_time()
+                send_timer = Timer(name="PCIe Send")
+                err = send_1d_fft_data(
+                    hw_data,
+                    2 * SAMPLES * ctypes.sizeof(ctypes.c_int16),
+                    batch_size,
+                )
+                if err != 0:
+                    logger.error("Failed to send 1D FFT Data")
+                send_timer.log_time()
             else:
                 time.sleep(0.1)
     else:
@@ -160,20 +185,17 @@ def receive_data():
     while sender.is_alive():
         if GlobalState.use_hw():
             try:
-                _ = send_queue.get_nowait()
                 fft_data = receive_result()
                 count = count + 1
                 if not receive_queue.full():
                     receive_queue.put(fft_data)
-            except queue.Empty:
+            except OutputEmpty:
                 time.sleep(0.001)
                 pass
         else:
             time.sleep(0.1)
 
-    while not send_queue.empty():
-        _ = send_queue.get()
-        _ = receive_result()
+    _ = flush_card(500)
     logger.debug("Leaving")
 
 
@@ -289,7 +311,6 @@ def flush_queue(q: queue.Queue[T]):
 
 def flush_queues() -> None:
     logger.debug("Entering")
-    flush_queue(send_queue)
     flush_queue(receive_queue)
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
     _ = flush_card(500)
