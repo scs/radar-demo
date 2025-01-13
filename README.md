@@ -4,7 +4,7 @@ author: [David Stadelmann]
 date: "2017-02-20"
 subject: "Installation"
 subtitle: "User Guide"
-...
+---
 
 # System Installation - Ubuntu 22.04
 
@@ -58,7 +58,7 @@ Confirm - Write the changes to disk?
 \pagebreak 
 </div>
 
-Select location  
+Select location to your location 
 
 ![Select location](./images/07.jpg "Select location")
 
@@ -79,6 +79,11 @@ As credentials set following values:
 <div style="page-break-after: always; visibility: hidden"> 
 \pagebreak 
 </div>
+
+Reboot the system and remove the usb stick when asked to
+
+
+![Reboot System](./images/08-1.jpg "Reboot System")
 
 Update the software for Ubuntu 22.04
 
@@ -277,7 +282,7 @@ Set IPv6 in the IPv6 Tab to Link-Local only
 
 
 
-## USB Ethernet cable
+## Goobay USB Ethernet cable 
 This step does not have to be done normally it is done with the ansible script.
 But it is kept here for documentation purposes.
 
