@@ -145,14 +145,13 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 
-def send_scene(idx: int) -> int:
+def send_scene(idx: int, step: int, ref_step: int) -> int:
     err: int = -1
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
-    step = GlobalState.get_current_steps()
-    logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
+    logger.debug(f"sending idx = [{idx}] step = {step}")
     if STATIC_CONFIG.versal_lib:
         if STATIC_CONFIG.versal_lib.input_ready():
-            err = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
+            err = STATIC_CONFIG.versal_lib.send_scene(idx, ref_step, step, num_channels, 0)
         else:
             logger.warning("No empty input buffer available")
             raise InputFull()
@@ -171,11 +170,14 @@ def send_radar_scene():
     timer: Timer = Timer("send_radar_scene")
     range_stop: int = get_result_range().stop
     idx: int = 0
+    step: list[int] = GlobalState.get_current_steps()
     if GlobalState.has_hw():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 try:
-                    err = send_scene(idx)
+                    if idx == 0:
+                        step = GlobalState.get_current_steps()
+                    err = send_scene(idx, step=step[idx], ref_step=step[0])
                     idx = (idx + 1) % range_stop
                     if err != 0:
                         logger.error("Error sending to card")
