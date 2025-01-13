@@ -1,6 +1,5 @@
 # pyright: reportAny=false
 import ctypes
-import logging
 import queue
 import threading
 import time
@@ -16,6 +15,7 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
+from app.logic.logging import LogLevel, get_logger
 from app.logic.state import GlobalState
 from app.logic.status import benchmark_info
 from app.logic.timer import Timer
@@ -23,6 +23,25 @@ from app.logic.timer import Timer
 matplotlib.use("agg")
 
 
+#######################################################################################################################
+# Module Global Variables
+#
+
+logger = get_logger(__name__, LogLevel.WARNING)
+
+send_queue: queue.Queue[int] = queue.Queue(maxsize=7)
+receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
+result_queue = queue.Queue(maxsize=2)
+stop_producer = threading.Event()
+
+AMPLITUDE = 32
+SAMPLES = 512
+SCALE = SAMPLES * AMPLITUDE
+count = 0
+
+
+#
+#######################################################################################################################
 def get_current_phase(samples: int) -> NDArray[np.float32]:
     current_step = GlobalState.get_current_steps()[0]
     border = 20
@@ -62,34 +81,7 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
     return (fig, line, x, np.max(absval))
 
 
-#######################################################################################################################
-# Module Global Variables
-#
-
-log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
-
-logger = logging.getLogger(__name__)
-logger_stream = logging.StreamHandler()
-logger_stream.setLevel(log_level)
-formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
-logger_stream.setFormatter(formatter)
-logger.setLevel(level=log_level)
-logger.info("benchmark demo app")
-logger.addHandler(logger_stream)
-logger.propagate = False
-
-send_queue: queue.Queue[int] = queue.Queue(maxsize=7)
-receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
-result_queue = queue.Queue(maxsize=2)
-stop_producer = threading.Event()
-
-AMPLITUDE = 32
-SAMPLES = 512
-SCALE = SAMPLES * AMPLITUDE
-count = 0
 fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
-#
-#######################################################################################################################
 
 
 def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_size: int) -> int:

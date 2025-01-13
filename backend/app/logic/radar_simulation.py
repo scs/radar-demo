@@ -3,7 +3,6 @@
 # pyright: reportUnknownArgumentType=false
 # pyright: reportAny=false
 import ctypes
-import logging
 import queue
 import threading
 import time
@@ -17,49 +16,13 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from app.logic.config import STATIC_CONFIG
+from app.logic.logging import LogLevel, get_logger
 from app.logic.model import MODEL_LOOKUP, Model
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
 
-#######################################################################################################################
-# Module Global Variables
-#
-log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
-
-
-class CustomFormatter(logging.Formatter):
-
-    grey: str = "\x1b[38;20m"
-    yellow: str = "\x1b[33;20m"
-    red: str = "\x1b[31;20m"
-    bold_red: str = "\x1b[31;1m"
-    reset: str = "\x1b[0m"
-    format_str: str = "%(levelname)-8s (%(filename)-26s:%(lineno)3d:%(funcName)-30s) - %(message)s "
-
-    FORMATS: dict[int, str] = {
-        logging.DEBUG: grey + format_str + reset,
-        logging.INFO: grey + format_str + reset,
-        logging.WARNING: yellow + format_str + reset,
-        logging.ERROR: red + format_str + reset,
-        logging.CRITICAL: bold_red + format_str + reset,
-    }
-
-    def format(self, record: logging.LogRecord):  # pyright: ignore [reportImplicitOverride]
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
-
-
-logger = logging.getLogger(__name__)
-logger_stream = logging.StreamHandler()
-logger_stream.setLevel(log_level)
-# formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
-logger_stream.setFormatter(CustomFormatter())
-logger.setLevel(log_level)
-logger.addHandler(logger_stream)
-logger.propagate = False
-
+logger = get_logger(__name__, LogLevel.WARNING)
 T = TypeVar("T")
 
 
@@ -188,7 +151,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     if idx == 0:
         while any([x.is_set() for x in gen_frames_state]):
             for i, s in enumerate(gen_frames_state):
-                print(f"state is set of [{i}] = {s.is_set()}")
+                logger.warning(f"state is set of [{i}] = {s.is_set()}")
                 time.sleep(0.001)
         GlobalState.stop_producer.clear()
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
@@ -221,7 +184,6 @@ def send_radar_scene():
     timer = Timer("send_radar_scene")
     if GlobalState.has_hw():
         while not stop_producer.is_set():
-            logger.info("looping")
             if GlobalState.use_hw() and GlobalState.is_running():
                 send_scene()
                 timer.log_time()

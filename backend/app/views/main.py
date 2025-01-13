@@ -7,6 +7,7 @@ from flask import Response, jsonify, render_template, request
 
 from app import app
 from app.logic.benchmark import gen_frames as gen_benchmark_frames
+from app.logic.logging import LogLevel, get_logger
 from app.logic.radar_simulation import gen_frames as gen_radar_frames
 from app.logic.state import GlobalState
 from app.logic.status import gen_radar_data
@@ -14,41 +15,8 @@ from app.logic.status import gen_radar_data
 #######################################################################################################################
 # Module Global Variables
 #
-log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
 LEAVE_PAGE_LOCK: threading.Lock = threading.Lock()
-
-
-class CustomFormatter(logging.Formatter):
-
-    grey: str = "\x1b[38;20m"
-    yellow: str = "\x1b[33;20m"
-    red: str = "\x1b[31;20m"
-    bold_red: str = "\x1b[31;1m"
-    reset: str = "\x1b[0m"
-    format_str: str = "%(levelname)-8s (%(filename)-26s:%(lineno)3d:%(funcName)-30s) - %(message)s "
-
-    FORMATS: dict[int, str] = {
-        logging.DEBUG: grey + format_str + reset,
-        logging.INFO: grey + format_str + reset,
-        logging.WARNING: yellow + format_str + reset,
-        logging.ERROR: red + format_str + reset,
-        logging.CRITICAL: bold_red + format_str + reset,
-    }
-
-    def format(self, record: logging.LogRecord):  # pyright: ignore [reportImplicitOverride]
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
-
-
-logger = logging.getLogger(__name__)
-logger_stream = logging.StreamHandler()
-logger_stream.setLevel(log_level)
-# formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)s() ] %(message)s")
-logger_stream.setFormatter(CustomFormatter())
-logger.setLevel(log_level)
-logger.addHandler(logger_stream)
-logger.propagate = False
+logger = get_logger(__name__, LogLevel.WARNING)
 
 
 @app.route("/stop")
@@ -118,6 +86,7 @@ def init_new_model():
 
 @app.route("/leavePage", methods=["Get"])
 def leave_page():
+    logger.info("Entering leave_page")
 
     def timeout(start: float) -> bool:
         TIMEOUT = 1  # second(s)
@@ -134,6 +103,7 @@ def leave_page():
                 break
 
     LEAVE_PAGE_LOCK.release()
+    logger.info("Leaving leave_page")
     return "", 200
 
 
