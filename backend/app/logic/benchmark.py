@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 from app.logic.config import STATIC_CONFIG
 from app.logic.flush_card import flush_card
 from app.logic.logging import LogLevel, get_logger
-from app.logic.output_exception import InputEmpty, OutputEmpty
+from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
 from app.logic.status import benchmark_info
 from app.logic.timer import Timer
@@ -122,7 +122,7 @@ def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_siz
             )
         else:
             logger.warning("No empty input buffers available")
-            raise InputEmpty()
+            raise InputFull()
     logger.debug("Leaving")
     return err
 
@@ -161,7 +161,7 @@ def send_data():
 
                     if err != 0:
                         logger.error("Failed to send 1D FFT Data")
-                except InputEmpty:
+                except InputFull:
                     time.sleep(0.01)
                 send_timer.log_time()
             else:
@@ -191,7 +191,7 @@ def receive_data():
                 if not receive_queue.full():
                     receive_queue.put(fft_data)
             except OutputEmpty:
-                time.sleep(0.001)
+                time.sleep(0.01)
                 pass
         else:
             time.sleep(0.1)

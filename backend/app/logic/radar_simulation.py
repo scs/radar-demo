@@ -19,12 +19,12 @@ from app.logic.config import STATIC_CONFIG
 from app.logic.flush_card import flush_card
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import MODEL_LOOKUP, Model
-from app.logic.output_exception import InputEmpty, OutputEmpty
+from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
 
-logger = get_logger(__name__, LogLevel.DEBUG)
+logger = get_logger(__name__, LogLevel.WARNING)
 T = TypeVar("T")
 
 
@@ -145,18 +145,17 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 
-def send_scene() -> int:
+def send_scene(idx: int) -> int:
     err: int = -1
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
     step = GlobalState.get_current_steps()
-    for idx in get_result_range():
-        logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
-        if STATIC_CONFIG.versal_lib:
-            if STATIC_CONFIG.versal_lib.input_ready():
-                err = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
-            else:
-                logger.warning("No empty input buffer available")
-                raise InputEmpty()
+    logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
+    if STATIC_CONFIG.versal_lib:
+        if STATIC_CONFIG.versal_lib.input_ready():
+            err = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
+        else:
+            logger.warning("No empty input buffer available")
+            raise InputFull()
     return err
 
 
@@ -169,17 +168,20 @@ def current_send_step() -> int:
 
 def send_radar_scene():
     logger.debug("Entering")
-    timer = Timer("send_radar_scene")
+    timer: Timer = Timer("send_radar_scene")
+    range_stop: int = get_result_range().stop
+    idx: int = 0
     if GlobalState.has_hw():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 try:
-                    err = send_scene()
+                    err = send_scene(idx)
+                    idx = (idx + 1) % range_stop
                     if err != 0:
                         logger.error("Error sending to card")
                     else:
                         timer.log_time()
-                except InputEmpty:
+                except InputFull:
                     time.sleep(0.01)
             else:
                 time.sleep(0.1)
@@ -281,7 +283,7 @@ def receive_radar_result_loop() -> None:
                 update_status(timer, iteration_idx)
                 iteration_idx += 1
             except OutputEmpty:
-                time.sleep(0.001)
+                time.sleep(0.01)
         else:
             time.sleep(0.1)
 
