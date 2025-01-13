@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
 from app.logic.logging import LogLevel, get_logger
-from app.logic.output_exception import OutputEmpty
+from app.logic.output_exception import InputEmpty, OutputEmpty
 from app.logic.state import GlobalState
 from app.logic.status import benchmark_info
 from app.logic.timer import Timer
@@ -113,11 +113,15 @@ def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_siz
     logger.debug("Entering")
     err = 1
     if STATIC_CONFIG.versal_lib:
-        err: int = STATIC_CONFIG.versal_lib.send_1d_fft_data(
-            data.ctypes,
-            data_size_in_bytes,
-            batch_size,
-        )
+        if STATIC_CONFIG.versal_lib.input_ready():
+            err: int = STATIC_CONFIG.versal_lib.send_1d_fft_data(
+                data.ctypes,
+                data_size_in_bytes,
+                batch_size,
+            )
+        else:
+            logger.warning("No empty input buffers available")
+            raise InputEmpty()
     logger.debug("Leaving")
     return err
 
@@ -127,6 +131,7 @@ def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
     if STATIC_CONFIG.versal_lib:
         output_ready: int = STATIC_CONFIG.versal_lib.output_ready()
         if output_ready == 0:
+            logger.warning("No occupied output buffers available")
             raise OutputEmpty()
         STATIC_CONFIG.versal_lib.receive_1d_fft_results(data.ctypes, size)
     logger.debug("Leaving")
@@ -136,6 +141,8 @@ def flush_card(timeout_ms: int) -> bool:
     logger.debug("Entering")
     if STATIC_CONFIG.versal_lib:
         err = STATIC_CONFIG.versal_lib.flush(timeout_ms)
+        if err != 0:
+            logger.error("Unable to flush the card!")
         return err == 0
     logger.debug("Leaving")
     return True
@@ -155,13 +162,17 @@ def send_data():
                 hw_data = hw_data.astype(np.int16)
                 data_arangement_timer.log_time()
                 send_timer = Timer(name="PCIe Send")
-                err = send_1d_fft_data(
-                    hw_data,
-                    2 * SAMPLES * ctypes.sizeof(ctypes.c_int16),
-                    batch_size,
-                )
-                if err != 0:
-                    logger.error("Failed to send 1D FFT Data")
+                try:
+                    err = send_1d_fft_data(
+                        hw_data,
+                        2 * SAMPLES * ctypes.sizeof(ctypes.c_int16),
+                        batch_size,
+                    )
+
+                    if err != 0:
+                        logger.error("Failed to send 1D FFT Data")
+                except InputEmpty:
+                    time.sleep(0.01)
                 send_timer.log_time()
             else:
                 time.sleep(0.1)

@@ -18,7 +18,7 @@ from PIL import Image
 from app.logic.config import STATIC_CONFIG
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import MODEL_LOOKUP, Model
-from app.logic.output_exception import OutputEmpty
+from app.logic.output_exception import InputEmpty, OutputEmpty
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
@@ -74,6 +74,8 @@ gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), thr
 def flush_card(timeout_ms: int) -> bool:
     if STATIC_CONFIG.versal_lib:
         err = STATIC_CONFIG.versal_lib.flush(timeout_ms)
+        if err != 0:
+            logger.error("Unable to flush the card!")
         return err == 0
     return True
 
@@ -149,16 +151,19 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 
-def send_scene():
-    err = -1
+def send_scene() -> int:
+    err: int = -1
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
     step = GlobalState.get_current_steps()
     for idx in get_result_range():
         logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
         if STATIC_CONFIG.versal_lib:
-            err: int = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
-            if err != 0:
-                logger.error("Error sending to card")
+            if STATIC_CONFIG.versal_lib.input_ready():
+                err = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
+            else:
+                logger.warning("No empty input buffer available")
+                raise InputEmpty()
+    return err
 
 
 def current_send_step() -> int:
@@ -174,8 +179,14 @@ def send_radar_scene():
     if GlobalState.has_hw():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
-                send_scene()
-                timer.log_time()
+                try:
+                    err = send_scene()
+                    if err != 0:
+                        logger.error("Error sending to card")
+                    else:
+                        timer.log_time()
+                except InputEmpty:
+                    time.sleep(0.01)
             else:
                 time.sleep(0.1)
     else:
@@ -192,16 +203,17 @@ def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
     idx = ctypes.c_uint32(0)
     uid = ctypes.c_uint32(0)
     if STATIC_CONFIG.versal_lib:
-        output_ready: int = STATIC_CONFIG.versal_lib.output_ready()
-        if output_ready == 0:
+        if STATIC_CONFIG.versal_lib.output_ready():
+            err: int = STATIC_CONFIG.versal_lib.receive_result(
+                complex_result.ctypes,
+                ctypes.byref(idx),
+                ctypes.byref(uid),
+                1024 * 512 * ctypes.sizeof(ctypes.c_int16),
+                0,
+            )
+        else:
+            logger.warning("No occupied output buffer available")
             raise OutputEmpty()
-        err: int = STATIC_CONFIG.versal_lib.receive_result(
-            complex_result.ctypes,
-            ctypes.byref(idx),
-            ctypes.byref(uid),
-            1024 * 512 * ctypes.sizeof(ctypes.c_int16),
-            0,
-        )
     timer.log_time()
     return (
         (idx.value, uid.value, complex_result) if err == 0 else (0, uid.value, np.zeros((1024, 512)).astype(np.int16))
