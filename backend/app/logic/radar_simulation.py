@@ -228,11 +228,6 @@ def check_expected_radar_idx(received: int, iteration_idx: int) -> None:
         logger.error(f"Unmatched index for expected result expected = {iteration_idx}, actual = {received}")
 
 
-def check_expected_uid(received: int) -> None:
-    if received != MODEL_LOOKUP[GlobalState.model.value]:
-        logger.error(f"UID model:{received} current model is {MODEL_LOOKUP[GlobalState.model.value]}")
-
-
 def check_bundle_step(radar_idx: int, send_step: int, bundle_step: int) -> int:
     if radar_idx == 0:
         return send_step
