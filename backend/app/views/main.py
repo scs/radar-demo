@@ -1,4 +1,3 @@
-import logging
 import threading
 from time import sleep, time
 from typing import Any
@@ -38,21 +37,26 @@ def frame_number() -> Response:
 
 @app.route("/video_feed/<int:idx>")
 def video_feed(idx: int) -> Response:
+    if idx == 0:
+        _ = GlobalState.running_lock.acquire()
     return Response(gen_radar_frames(idx), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.route("/imaging_feed")
 def imaging_feed() -> Response:
+    _ = GlobalState.running_lock.acquire()
     return Response(gen_radar_frames(0), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.route("/short_range_feed")
 def short_range_feed() -> Response:
+    _ = GlobalState.running_lock.acquire()
     return Response(gen_radar_frames(0), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.route("/benchmark_feed")
 def benchmark_feed() -> Response:
+    _ = GlobalState.running_lock.acquire()
     return Response(gen_benchmark_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
@@ -89,18 +93,21 @@ def leave_page():
     logger.info("Entering leave_page")
 
     def timeout(start: float) -> bool:
-        TIMEOUT = 1  # second(s)
+        sleep(0.01)
+        TIMEOUT = 5  # second(s)
         return time() - start > TIMEOUT
 
-    _ = LEAVE_PAGE_LOCK.acquire()
-    if GlobalState.mutex_lock.locked():
+    _ = LEAVE_PAGE_LOCK.acquire()  # this is to make sure that multiple calls to this function do not mess things up
+
+    if GlobalState.running_lock.locked():
         GlobalState.stop_producer.set()
-        start = time()
+        start: float = time()
         while GlobalState.stop_producer.is_set():
-            sleep(0.01)
             if timeout(start):  # [seconds]
                 logger.error("Unable to stop producer")
                 break
+
+        GlobalState.running_lock.release()
 
     LEAVE_PAGE_LOCK.release()
     logger.info("Leaving leave_page")

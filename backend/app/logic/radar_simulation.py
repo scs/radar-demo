@@ -24,7 +24,7 @@ from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
 
-logger = get_logger(__name__, LogLevel.WARNING)
+logger = get_logger(__name__, LogLevel.DEBUG)
 T = TypeVar("T")
 
 
@@ -63,7 +63,9 @@ receive_queues = QueueList(num_queues=4, maxsize=2)
 
 stop_producer = threading.Event()
 
-lock_unlock: threading.Lock = threading.Lock()
+# locks to make sure only one of the multiple gen_frames can start / stop the threads
+stop_lock: threading.Lock = threading.Lock()
+start_lock: threading.Lock = threading.Lock()
 
 gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), threading.Event()]
 
@@ -86,7 +88,7 @@ def start_threads(idx: int) -> None:
     global consumer
     global converter
     logger.debug("Wait for mutex")
-    if GlobalState.mutex_lock.acquire(blocking=False):
+    if start_lock.acquire(blocking=False):
         flush_queues()
         logger.debug(f"-- Mutex aquired for thread with id = {idx} --")
         producer = threading.Thread(target=send_radar_scene, name="producer")
@@ -100,10 +102,10 @@ def start_threads(idx: int) -> None:
 
 def stop_threads(idx: int) -> None:
     logger.debug(f"Entering STOP THREADS with idx = {idx}")
-    stop_producer.set()
-    logger.info("set stop_producer")
-    _ = lock_unlock.acquire()
-    if GlobalState.mutex_lock.locked():
+    _ = stop_lock.acquire()
+    if start_lock.locked():
+        stop_producer.set()
+        logger.info("set stop_producer")
         producer.join()
         consumer.join()
         converter.join()
@@ -111,9 +113,9 @@ def stop_threads(idx: int) -> None:
         range_doppler_info.reset()
 
         logger.debug("Releasing mutex")
-        GlobalState.mutex_lock.release()
-    lock_unlock.release()
-    logger.debug("Leaving")
+        start_lock.release()
+    stop_lock.release()
+    logger.debug(f"Leaving STOP THREADS with idx = {idx}")
 
 
 def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]

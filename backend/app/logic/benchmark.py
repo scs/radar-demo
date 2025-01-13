@@ -274,18 +274,15 @@ def start_threads() -> None:
     global receiver
     global converter
     logger.debug("Wait for mutex")
-    locked = GlobalState.mutex_lock.acquire(timeout=0.1)
-    if locked:
-        flush_queues()
-        logger.debug("Mutex aquired")
-        sender = threading.Thread(target=send_data, name="sender")
-        sender.start()
-        receiver = threading.Thread(target=receive_data, name="receiver")
-        receiver.start()
-        converter = threading.Thread(target=convert_data, name="converter")
-        converter.start()
-    else:
-        logger.debug("No Mutex aquired")
+    stop_producer.clear()
+    flush_queues()
+    logger.debug("Mutex aquired")
+    sender = threading.Thread(target=send_data, name="sender")
+    sender.start()
+    receiver = threading.Thread(target=receive_data, name="receiver")
+    receiver.start()
+    converter = threading.Thread(target=convert_data, name="converter")
+    converter.start()
     logger.debug("Leaving")
 
 
@@ -295,10 +292,8 @@ def stop_threads() -> None:
     sender.join()
     receiver.join()
     converter.join()
+    flush_queues()
     benchmark_info.reset()
-
-    logger.debug("Releasing mutex")
-    GlobalState.mutex_lock.release()
     logger.debug("Leaving")
 
 
@@ -320,7 +315,6 @@ def flush_queues() -> None:
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
     logger.debug("Entering")
-    stop_producer.clear()
     start_threads()
     loop_timer = Timer("benchmark")
     count_bak = count
