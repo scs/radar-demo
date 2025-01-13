@@ -1,5 +1,6 @@
 import logging
-from time import sleep
+import threading
+from time import sleep, time
 from typing import Any
 
 from flask import Response, jsonify, render_template, request
@@ -14,6 +15,7 @@ from app.logic.status import gen_radar_data
 # Module Global Variables
 #
 log_level = logging.ERROR  # NOTSET, DEBUG, INFO, WARNING, ERROR
+LEAVE_PAGE_LOCK: threading.Lock = threading.Lock()
 
 
 class CustomFormatter(logging.Formatter):
@@ -99,7 +101,7 @@ def get_settings():
 
 @app.route("/settings", methods=["POST"])
 def post_settings():
-    data: dict[str, Any] = request.get_json()
+    data: dict[str, Any] = request.get_json()  # pyright: ignore [reportExplicitAny]
     id: int = data["id"]
     selectedSetting: dict[str, str] = data["selectedSetting"]
     GlobalState.update_settings(id, selectedSetting)
@@ -108,7 +110,7 @@ def post_settings():
 
 @app.route("/initNewModel", methods=["POST"])
 def init_new_model():
-    data: dict[str, Any] = request.get_json()
+    data: dict[str, Any] = request.get_json()  # pyright: ignore [reportExplicitAny]
     model: str = data["demoModel"]
     GlobalState.init_state(model)
     return jsonify(GlobalState.get_current_state())
@@ -116,19 +118,23 @@ def init_new_model():
 
 @app.route("/leavePage", methods=["Get"])
 def leave_page():
+
+    def timeout(start: float) -> bool:
+        TIMEOUT = 1  # second(s)
+        return time() - start > TIMEOUT
+
+    _ = LEAVE_PAGE_LOCK.acquire()
     if GlobalState.mutex_lock.locked():
         GlobalState.stop_producer.set()
-        timeout = 0
-
+        start = time()
         while GlobalState.stop_producer.is_set():
             sleep(0.01)
-            timeout += 1
-            if timeout == 5000:
+            if timeout(start):  # [seconds]
                 logger.error("Unable to stop producer")
                 break
-        return "", 200
-    else:
-        return "", 200
+
+    LEAVE_PAGE_LOCK.release()
+    return "", 200
 
 
 @app.route("/initApp", methods=["GET"])
