@@ -16,6 +16,7 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from app.logic.config import STATIC_CONFIG
+from app.logic.flush_card import flush_card
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import MODEL_LOOKUP, Model
 from app.logic.output_exception import InputEmpty, OutputEmpty
@@ -69,15 +70,6 @@ gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), thr
 
 #
 #######################################################################################################################
-
-
-def flush_card(timeout_ms: int) -> bool:
-    if STATIC_CONFIG.versal_lib:
-        err = STATIC_CONFIG.versal_lib.flush(timeout_ms)
-        if err != 0:
-            logger.error("Unable to flush the card!")
-        return err == 0
-    return True
 
 
 def flush_queues() -> None:

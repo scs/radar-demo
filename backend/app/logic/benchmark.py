@@ -15,6 +15,7 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
+from app.logic.flush_card import flush_card
 from app.logic.logging import LogLevel, get_logger
 from app.logic.output_exception import InputEmpty, OutputEmpty
 from app.logic.state import GlobalState
@@ -135,17 +136,6 @@ def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
             raise OutputEmpty()
         STATIC_CONFIG.versal_lib.receive_1d_fft_results(data.ctypes, size)
     logger.debug("Leaving")
-
-
-def flush_card(timeout_ms: int) -> bool:
-    logger.debug("Entering")
-    if STATIC_CONFIG.versal_lib:
-        err = STATIC_CONFIG.versal_lib.flush(timeout_ms)
-        if err != 0:
-            logger.error("Unable to flush the card!")
-        return err == 0
-    logger.debug("Leaving")
-    return True
 
 
 def send_data():
