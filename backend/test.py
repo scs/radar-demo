@@ -11,6 +11,7 @@ class ImageStreamApp:
     def __init__(self, master: tk.Tk) -> None:
         self.master: tk.Tk = master
         self.master.title("Image Streams")
+        self.page_left = True
 
         # Create a frame that will contain the canvas
         self.frame: tk.Frame = tk.Frame(master)
@@ -54,7 +55,6 @@ class ImageStreamApp:
             for j in range(2):
                 canvas = self.canvases[i][j]
                 linear_index = 2 * i + j
-                print(f"Fetching data for canvas {linear_index}")
                 # Get next image from the generator
                 data = next(self.generators[linear_index])
 
@@ -77,7 +77,7 @@ class ImageStreamApp:
 
         # Schedule the next update
         _ = GlobalState.gen_frame_number()
-        _ = self.master.after(16, self.update_images)
+        _ = self.master.after(1, self.update_images)
 
 
 if __name__ == "__main__":
