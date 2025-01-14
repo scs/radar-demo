@@ -121,7 +121,7 @@ def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_siz
                 batch_size,
             )
         else:
-            logger.warning("No empty input buffers available")
+            # logger.warning("No empty input buffers available")
             raise InputFull()
     logger.debug("Leaving")
     return err
@@ -132,7 +132,7 @@ def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
     if STATIC_CONFIG.versal_lib:
         output_ready: int = STATIC_CONFIG.versal_lib.output_ready()
         if output_ready == 0:
-            logger.warning("No occupied output buffers available")
+            # logger.warning("No occupied output buffers available")
             raise OutputEmpty()
         STATIC_CONFIG.versal_lib.receive_1d_fft_results(data.ctypes, size)
     logger.debug("Leaving")

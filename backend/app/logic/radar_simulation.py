@@ -153,7 +153,7 @@ def send_scene(idx: int, step: int, ref_step: int) -> int:
         if STATIC_CONFIG.versal_lib.input_ready():
             err = STATIC_CONFIG.versal_lib.send_scene(idx, ref_step, step, num_channels, 0)
         else:
-            logger.warning("No empty input buffer available")
+            # logger.warning("No empty input buffer available")
             raise InputFull()
     return err
 
@@ -210,7 +210,7 @@ def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
                 0,
             )
         else:
-            logger.warning("No occupied output buffer available")
+            # logger.warning("No occupied output buffer available")
             raise OutputEmpty()
     timer.log_time()
     return (
