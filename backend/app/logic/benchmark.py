@@ -15,7 +15,6 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import flush_card
 from app.logic.logging import LogLevel, get_logger
 from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
@@ -34,6 +33,8 @@ logger = get_logger(__name__, LogLevel.WARNING)
 receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
 result_queue = queue.Queue(maxsize=2)
 stop_producer = threading.Event()
+stop_receiver = threading.Event()
+stop_converter = threading.Event()
 
 AMPLITUDE = 32
 SAMPLES = 512
@@ -169,6 +170,7 @@ def send_data():
     else:
         while not stop_producer.is_set():
             time.sleep(0.1)
+    stop_receiver.set()
     logger.debug("Leaving")
 
 
@@ -184,7 +186,7 @@ def receive_data():
     logger.debug("Entering")
     global count
     while sender.is_alive():
-        if GlobalState.use_hw():
+        if GlobalState.has_hw():
             try:
                 fft_data = receive_result()
                 count = count + 1
@@ -206,7 +208,7 @@ def receive_data():
                 eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
             except OutputEmpty:
                 continue
-
+    stop_converter.set()
     logger.debug("Leaving")
 
 
@@ -268,7 +270,7 @@ def stopped_stream():
 
 def convert_data():
     logger.debug("Entering")
-    while receiver.is_alive():
+    while not stop_converter.is_set():
         hw_stream()
         sw_stream()
         stopped_stream()
@@ -285,6 +287,8 @@ def start_threads() -> None:
     global converter
     logger.debug("Wait for mutex")
     stop_producer.clear()
+    stop_receiver.clear()
+    stop_converter.clear()
     flush_queues()
     logger.debug("Mutex aquired")
     sender = threading.Thread(target=send_data, name="sender")
@@ -319,7 +323,7 @@ def flush_queues() -> None:
     logger.debug("Entering")
     flush_queue(receive_queue)
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
-    _ = flush_card(400)
+    # _ = flush_card(400)
     logger.debug("Leaving")
 
 

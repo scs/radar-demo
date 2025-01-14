@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import eib, eob, flush_card, oib, oob
+from app.logic.flush_card import eib, eob, oib, oob
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
 from app.logic.output_exception import InputFull, OutputEmpty
@@ -62,6 +62,8 @@ result_queues = QueueList(num_queues=4, maxsize=2)
 receive_queues = QueueList(num_queues=4, maxsize=2)
 
 stop_producer = threading.Event()
+stop_receiver = threading.Event()
+stop_converter = threading.Event()
 
 # locks to make sure only one of the multiple gen_frames can start / stop the threads
 stop_lock: threading.Lock = threading.Lock()
@@ -78,7 +80,7 @@ def flush_queues() -> None:
     logger.debug("Entering")
     receive_queues.flush()
     result_queues.flush()
-    _ = flush_card(400)
+    # _ = flush_card(400)
     logger.debug("Leaving")
 
 
@@ -89,6 +91,9 @@ def start_threads(idx: int) -> None:
     global converter
     logger.debug("Wait for mutex")
     if start_lock.acquire(blocking=False):
+        stop_producer.clear()
+        stop_receiver.clear()
+        stop_converter.clear()
         flush_queues()
         logger.debug(f"-- Mutex aquired for thread with id = {idx} --")
         producer = threading.Thread(target=send_radar_scene, name="producer")
@@ -122,7 +127,6 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     logger.debug(f"Entering GEN FRAMES with idx = {idx}")
     gen_frames_state[idx].set()
 
-    stop_producer.clear()
     start_threads(idx)
 
     while not GlobalState.stop_producer.is_set():
@@ -146,17 +150,22 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 
-def send_scene(idx: int, step: int, ref_step: int) -> int:
-    err: int = -1
+def send_scene(timeout_ms: float) -> None:
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
-    logger.debug(f"sending idx = [{idx}] step = {step}")
-    if STATIC_CONFIG.versal_lib:
-        if STATIC_CONFIG.versal_lib.input_ready():
-            err = STATIC_CONFIG.versal_lib.send_scene(idx, ref_step, step, num_channels, 0)
-        else:
-            # logger.warning("No empty input buffer available")
-            raise InputFull()
-    return err
+    step: list[int] = GlobalState.get_current_steps()
+    timeout = Timer("send_timeout")
+    for idx in get_result_range():
+        logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
+        if STATIC_CONFIG.versal_lib:
+            if STATIC_CONFIG.versal_lib.input_ready():
+                err = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
+                if err:
+                    logger.error("Unable to send scene")
+            else:
+                if timeout.snapshot() / 1000 > timeout_ms:
+                    raise InputFull()
+                else:
+                    time.sleep(0.01)
 
 
 def current_send_step() -> int:
@@ -169,23 +178,15 @@ def current_send_step() -> int:
 def send_radar_scene():
     logger.debug("Entering")
     timer: Timer = Timer("send_radar_scene")
-    range_stop: int = get_result_range().stop
-    idx: int = 0
-    step: list[int] = GlobalState.get_current_steps()
     if GlobalState.has_hw():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 try:
-                    if idx == 0:
-                        step = GlobalState.get_current_steps()
-                    err = send_scene(idx, step=step[idx], ref_step=step[0])
-                    idx = (idx + 1) % range_stop
-                    if err != 0:
-                        logger.error("Error sending to card")
-                    else:
-                        timer.log_time()
+                    send_scene(8 * 60)
+                    timer.log_time()
                 except InputFull:
-                    time.sleep(0.01)
+                    logger.error("Unable to send scene")
+                    continue
             else:
                 eib(LogLevel.INFO)
                 eob(LogLevel.INFO)
@@ -277,7 +278,7 @@ def receive_radar_result_loop() -> None:
     iteration_idx = 0
     full = True
     while producer.is_alive():
-        if GlobalState.use_hw():
+        if GlobalState.has_hw():
             try:
                 radar_idx, send_step, result = receive_radar_result()
                 bundle_step = check_received_meta_data(iteration_idx, radar_idx, send_step, bundle_step)
@@ -286,10 +287,11 @@ def receive_radar_result_loop() -> None:
                 update_status(timer, iteration_idx)
                 iteration_idx += 1
             except OutputEmpty:
-                time.sleep(0.01)
+                time.sleep(0.008)  # wait for 8 ms (half the time that one cycle should take)
         else:
             time.sleep(0.1)
 
+    start = time.time()
     if STATIC_CONFIG.versal_lib:
         eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
         eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
@@ -298,6 +300,10 @@ def receive_radar_result_loop() -> None:
                 _, _, _ = receive_radar_result()
                 eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
                 eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+                stop = time.time()
+                if stop - start > 2:
+                    start = time.time()
+                    logger.warning(f"[{eib}] empty buffers\n[{eob}] empty buffers")
             except OutputEmpty:
                 continue
 

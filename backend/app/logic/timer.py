@@ -7,7 +7,7 @@ logger.info("radar demo app")
 
 
 class Timer:
-    DEBUG = False
+    DEBUG: bool = False
 
     def __init__(self, name: str):
         self.name: str = name
@@ -21,6 +21,9 @@ class Timer:
         duration = stop - self.start_time
         self.start_time = time.time()
         return duration
+
+    def snapshot(self) -> float:
+        return time.time() - self.start_time
 
     def log_time(self) -> None:
         if Timer.DEBUG:
