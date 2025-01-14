@@ -225,8 +225,9 @@ def check_received_meta_data(iteration_idx: int, radar_idx: int, step: int, bund
 
 
 def check_expected_radar_idx(received: int, iteration_idx: int) -> None:
-    if received != iteration_idx % get_result_range().stop:
-        logger.error(f"Unmatched index for expected result expected = {iteration_idx}, actual = {received}")
+    expected = iteration_idx % get_result_range().stop
+    if received != expected:
+        logger.error(f"Unmatched index for expected result expected = {expected}, actual = {received}")
 
 
 def check_bundle_step(radar_idx: int, send_step: int, bundle_step: int) -> int:
