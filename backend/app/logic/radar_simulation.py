@@ -16,9 +16,9 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import eib, eob, flush_card, oib, oob
+from app.logic.flush_card import flush_card
 from app.logic.logging import LogLevel, get_logger
-from app.logic.model import MODEL_LOOKUP, Model
+from app.logic.model import Model
 from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
@@ -284,13 +284,14 @@ def receive_radar_result_loop() -> None:
         else:
             time.sleep(0.1)
 
-    time.sleep(2)
-    eib(LogLevel.INFO)
-    eob(LogLevel.INFO)
-    oib(LogLevel.INFO)
-    oob(LogLevel.INFO)
+    if STATIC_CONFIG.versal_lib:
+        eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+        eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+        while eib != 8 and eob != 8:
+            _, _, _ = receive_radar_result()
+            eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+            eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
 
-    _ = flush_card(400)
     logger.debug("Leaving")
 
 
