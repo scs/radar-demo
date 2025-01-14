@@ -288,9 +288,12 @@ def receive_radar_result_loop() -> None:
         eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
         eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
         while eib != 8 and eob != 8:
-            _, _, _ = receive_radar_result()
-            eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-            eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+            try:
+                _, _, _ = receive_radar_result()
+                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+                eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+            except OutputEmpty:
+                continue
 
     logger.debug("Leaving")
 

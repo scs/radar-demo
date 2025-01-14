@@ -200,9 +200,12 @@ def receive_data():
         eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
         eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
         while eib != 8 and eob != 8:
-            _ = receive_result()
-            eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-            eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+            try:
+                _ = receive_result()
+                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+                eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+            except OutputEmpty:
+                continue
 
     logger.debug("Leaving")
 
