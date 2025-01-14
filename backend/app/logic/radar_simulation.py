@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import flush_card
+from app.logic.flush_card import eib, eob, flush_card, oib, oob
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
 from app.logic.output_exception import InputFull, OutputEmpty
@@ -187,6 +187,10 @@ def send_radar_scene():
                 except InputFull:
                     time.sleep(0.01)
             else:
+                eib(LogLevel.INFO)
+                eob(LogLevel.INFO)
+                oib(LogLevel.INFO)
+                oob(LogLevel.INFO)
                 time.sleep(0.1)
     else:
         while not stop_producer.is_set():
