@@ -196,7 +196,7 @@ def receive_data():
         else:
             time.sleep(0.1)
 
-    _ = flush_card(500)
+    _ = flush_card(4000)
     logger.debug("Leaving")
 
 
@@ -309,7 +309,7 @@ def flush_queues() -> None:
     logger.debug("Entering")
     flush_queue(receive_queue)
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
-    _ = flush_card(500)
+    _ = flush_card(4000)
     logger.debug("Leaving")
 
 

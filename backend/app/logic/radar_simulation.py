@@ -78,7 +78,7 @@ def flush_queues() -> None:
     logger.debug("Entering")
     receive_queues.flush()
     result_queues.flush()
-    _ = flush_card(400)
+    _ = flush_card(4000)
     logger.debug("Leaving")
 
 
@@ -284,7 +284,7 @@ def receive_radar_result_loop() -> None:
         else:
             time.sleep(0.1)
 
-    _ = flush_card(400)
+    _ = flush_card(4000)
     logger.debug("Leaving")
 
 
