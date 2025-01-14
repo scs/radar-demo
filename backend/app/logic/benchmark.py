@@ -15,7 +15,7 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import flush_card
+from app.logic.flush_card import eib, eob, flush_card, oib, oob
 from app.logic.logging import LogLevel, get_logger
 from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
@@ -196,7 +196,13 @@ def receive_data():
         else:
             time.sleep(0.1)
 
-    _ = flush_card(4000)
+    time.sleep(2)
+    eib(LogLevel.INFO)
+    eob(LogLevel.INFO)
+    oib(LogLevel.INFO)
+    oob(LogLevel.INFO)
+
+    _ = flush_card(400)
     logger.debug("Leaving")
 
 
@@ -309,7 +315,7 @@ def flush_queues() -> None:
     logger.debug("Entering")
     flush_queue(receive_queue)
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
-    _ = flush_card(4000)
+    _ = flush_card(400)
     logger.debug("Leaving")
 
 

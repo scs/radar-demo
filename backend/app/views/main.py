@@ -94,7 +94,7 @@ def leave_page():
 
     def timeout(start: float) -> bool:
         sleep(0.01)
-        TIMEOUT = 5  # second(s)
+        TIMEOUT = 10  # second(s)
         return time() - start > TIMEOUT
 
     _ = LEAVE_PAGE_LOCK.acquire()  # this is to make sure that multiple calls to this function do not mess things up

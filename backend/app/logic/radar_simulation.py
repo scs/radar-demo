@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import flush_card
+from app.logic.flush_card import eib, eob, flush_card, oib, oob
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import MODEL_LOOKUP, Model
 from app.logic.output_exception import InputFull, OutputEmpty
@@ -78,7 +78,7 @@ def flush_queues() -> None:
     logger.debug("Entering")
     receive_queues.flush()
     result_queues.flush()
-    _ = flush_card(4000)
+    _ = flush_card(400)
     logger.debug("Leaving")
 
 
@@ -284,7 +284,13 @@ def receive_radar_result_loop() -> None:
         else:
             time.sleep(0.1)
 
-    _ = flush_card(4000)
+    time.sleep(2)
+    eib(LogLevel.INFO)
+    eob(LogLevel.INFO)
+    oib(LogLevel.INFO)
+    oob(LogLevel.INFO)
+
+    _ = flush_card(400)
     logger.debug("Leaving")
 
 
