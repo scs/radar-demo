@@ -139,7 +139,8 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     if idx == 0:
         while any([x.is_set() for x in gen_frames_state]):
             for i, s in enumerate(gen_frames_state):
-                logger.warning(f"state is set of [{i}] = {s.is_set()}")
+                if s.is_set():
+                    logger.warning(f"state is set of [{i}] = {s.is_set()}")
                 time.sleep(0.001)
         GlobalState.stop_producer.clear()
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
