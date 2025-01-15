@@ -501,6 +501,7 @@ def hw_stream():
                 continue
 
         for idx in get_result_range():
+            logger.info(f"Fetching result from recieve queue {idx}")
             result: NDArray[np.int16] = receive_queues[idx].get()
             if not result_queues.anyfull():
                 if result.shape != (1024, 512):
@@ -511,6 +512,7 @@ def hw_stream():
                 normed_image = norm_image(result)
                 if not result_queues[idx].full():
                     frame = create_frame(cfar(heat_map(normed_image)))
+                    logger.info(f"Push to result queue{idx}")
                     result_queues[idx].put(frame)
     logger.debug("Leaving")
 
