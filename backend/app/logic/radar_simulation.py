@@ -489,7 +489,7 @@ def stopped_stream() -> None:
 
 
 def hw_stream():
-    logger.debug("Entering")
+    logger.info("Entering")
     while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
         if GlobalState.model == Model.QUAD_CORNER:
             if receive_queues.anyempty():
@@ -514,7 +514,7 @@ def hw_stream():
                     frame = create_frame(cfar(heat_map(normed_image)))
                     logger.info(f"Push to result queue{idx}")
                     result_queues[idx].put(frame)
-    logger.debug("Leaving")
+    logger.info("Leaving")
 
 
 def sw_stream():
