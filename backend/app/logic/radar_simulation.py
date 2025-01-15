@@ -493,6 +493,9 @@ def hw_stream():
     while consumer.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
         if GlobalState.model == Model.QUAD_CORNER:
             if receive_queues.anyempty():
+                for i, q in enumerate(receive_queues):
+                    if q.empty():
+                        logger.info(f"Receive Queue [{i}] is empty")
                 time.sleep(0.001)
                 continue
         else:
