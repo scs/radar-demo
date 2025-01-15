@@ -150,7 +150,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
     logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 
-def send_scene(timeout_ms: float) -> None:
+def send_scene(timeout_ms: float, frame_nr: int) -> int:
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
     step: list[int] = GlobalState.get_current_steps()
     timeout = Timer("send_timeout")
@@ -158,14 +158,22 @@ def send_scene(timeout_ms: float) -> None:
         logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
         if STATIC_CONFIG.versal_lib:
             if STATIC_CONFIG.versal_lib.input_ready():
-                err = STATIC_CONFIG.versal_lib.send_scene(idx, step[0], step[idx], num_channels, 0)
+                err = STATIC_CONFIG.versal_lib.send_scene(idx, frame_nr, step[idx], num_channels, 0)
                 if err:
-                    logger.error("Unable to send scene")
+
+                    logger.error("####################################################################")
+                    logger.error("####################    Unable to send scene    ####################")
+                    logger.error("####################################################################")
+                else:
+                    frame_nr += 1
             else:
                 if timeout.snapshot() / 1000 > timeout_ms:
+                    logger.error("Input full timeout")
                     raise InputFull()
                 else:
                     time.sleep(0.01)
+
+    return frame_nr
 
 
 def current_send_step() -> int:
@@ -178,14 +186,14 @@ def current_send_step() -> int:
 def send_radar_scene():
     logger.debug("Entering")
     timer: Timer = Timer("send_radar_scene")
+    frame_nr: int = 0
     if GlobalState.has_hw():
         while not stop_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 try:
-                    send_scene(8 * 60)
+                    frame_nr = send_scene(8 * 60, frame_nr)
                     timer.log_time()
                 except InputFull:
-                    logger.error("Unable to send scene")
                     continue
             else:
                 eib(LogLevel.INFO)
@@ -200,50 +208,46 @@ def send_radar_scene():
     logger.debug("Leaving")
 
 
-def receive_radar_result() -> tuple[int, int, NDArray[np.int16]]:
+def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
     complex_result = np.empty((1024, 512), np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
     idx = ctypes.c_uint32(0)
-    uid = ctypes.c_uint32(0)
+    step = ctypes.c_uint32(0)
+    frame_nr = ctypes.c_uint32(0)
     if STATIC_CONFIG.versal_lib:
         if STATIC_CONFIG.versal_lib.output_ready():
             err: int = STATIC_CONFIG.versal_lib.receive_result(
                 complex_result.ctypes,
                 ctypes.byref(idx),
-                ctypes.byref(uid),
+                ctypes.byref(step),
+                ctypes.byref(frame_nr),
                 1024 * 512 * ctypes.sizeof(ctypes.c_int16),
                 0,
             )
+            if err:
+                logger.error("###############################################################")
+                logger.error("########           Unable to receive result           #########")
+                logger.error("###############################################################")
         else:
             # logger.warning("No occupied output buffer available")
             raise OutputEmpty()
     timer.log_time()
     return (
-        (idx.value, uid.value, complex_result) if err == 0 else (0, uid.value, np.zeros((1024, 512)).astype(np.int16))
+        (idx.value, step.value, frame_nr.value, complex_result)
+        if err == 0
+        else (0, step.value, frame_nr.value, np.zeros((1024, 512)).astype(np.int16))
     )
 
 
-def check_received_meta_data(iteration_idx: int, radar_idx: int, step: int, bundle_step: int) -> int:
+def check_received_meta_data(iteration_idx: int, radar_idx: int) -> None:
     check_expected_radar_idx(radar_idx, iteration_idx)
-    return check_bundle_step(radar_idx, step, bundle_step)
 
 
 def check_expected_radar_idx(received: int, iteration_idx: int) -> None:
     expected = iteration_idx % get_result_range().stop
     if received != expected:
         logger.error(f"Unmatched index for expected result expected = {expected}, actual = {received}")
-
-
-def check_bundle_step(radar_idx: int, send_step: int, bundle_step: int) -> int:
-    if radar_idx == 0:
-        return send_step
-    else:
-        if send_step != bundle_step:
-            logger.error(
-                f"Unmatched send step within bundle radar[{radar_idx}]->{send_step}, bundled step expected is {bundle_step}"
-            )
-        return bundle_step
 
 
 def update_status(timer: Timer, count: int) -> None:
@@ -253,37 +257,36 @@ def update_status(timer: Timer, count: int) -> None:
 
 
 def enqueue_received(
-    radar_idx: int, send_step: int, previous_step: int, full: bool, data: NDArray[np.int16]
+    radar_idx: int, send_step: int, previous_step: int, commit: bool, data: NDArray[np.int16]
 ) -> tuple[bool, int]:
     # pre condition
     if radar_idx == 0:
-        full = receive_queues.anyfull()
-
-    if not full:
-        if send_step != previous_step:
-            receive_queues[radar_idx].put(data)
-
-    # post condition
-    if radar_idx == get_result_range().stop - 1:
+        commit = not receive_queues.anyfull() and send_step != previous_step
         previous_step = send_step
 
-    return full, previous_step
+    if commit:
+        receive_queues[radar_idx].put(data)
+
+    return commit, previous_step
 
 
 def receive_radar_result_loop() -> None:
     logger.debug("Entering")
     timer = Timer(name="receive loop")
     previous_step: int = -1
-    bundle_step: int = 0
     iteration_idx = 0
-    full = True
+    commit = True
+    expected_frame_nr: int = 0
     while producer.is_alive():
         if GlobalState.has_hw():
             try:
-                radar_idx, send_step, result = receive_radar_result()
-                bundle_step = check_received_meta_data(iteration_idx, radar_idx, send_step, bundle_step)
+                radar_idx, step, frame_nr, result = receive_radar_result()
+                check_received_meta_data(iteration_idx, radar_idx)
+                if expected_frame_nr != frame_nr:
+                    logger.error(f"Expected frame number {expected_frame_nr}, received frame number {frame_nr}")
+                expected_frame_nr += 1
 
-                full, previous_step = enqueue_received(radar_idx, send_step, previous_step, full, result)
+                commit, previous_step = enqueue_received(radar_idx, step, previous_step, commit, result)
                 update_status(timer, iteration_idx)
                 iteration_idx += 1
             except OutputEmpty:
@@ -297,7 +300,7 @@ def receive_radar_result_loop() -> None:
         eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
         while eib != 8 and eob != 8:
             try:
-                _, _, _ = receive_radar_result()
+                _, _, _, _ = receive_radar_result()
                 eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
                 eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
                 stop = time.time()
