@@ -160,7 +160,6 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
             if STATIC_CONFIG.versal_lib.input_ready():
                 err = STATIC_CONFIG.versal_lib.send_scene(idx, frame_nr, step[idx], num_channels, 0)
                 if err:
-
                     logger.error("####################################################################")
                     logger.error("####################    Unable to send scene    ####################")
                     logger.error("####################################################################")
@@ -259,12 +258,15 @@ def update_status(timer: Timer, count: int) -> None:
 def enqueue_received(
     radar_idx: int, send_step: int, previous_step: int, commit: bool, data: NDArray[np.int16]
 ) -> tuple[bool, int]:
+    logger.debug(f"Enqueu for idx = {radar_idx}")
     # pre condition
     if radar_idx == 0:
         commit = not receive_queues.anyfull() and send_step != previous_step
+        logger.debug(f"Commit is being set to {commit}, send_step = {send_step}")
         previous_step = send_step
 
     if commit:
+        logger.debug(f"Commiting for queue {radar_idx}")
         receive_queues[radar_idx].put(data)
 
     return commit, previous_step
@@ -281,7 +283,7 @@ def receive_radar_result_loop() -> None:
         if GlobalState.has_hw():
             try:
                 radar_idx, step, frame_nr, result = receive_radar_result()
-                check_received_meta_data(iteration_idx, radar_idx)
+                # check_received_meta_data(iteration_idx, radar_idx)
                 if expected_frame_nr != frame_nr:
                     logger.error(f"Expected frame number {expected_frame_nr}, received frame number {frame_nr}")
                 expected_frame_nr += 1
