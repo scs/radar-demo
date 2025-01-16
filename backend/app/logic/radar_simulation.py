@@ -277,18 +277,23 @@ def receive_radar_result_loop() -> None:
     timer = Timer(name="receive loop")
     previous_step: int = -1
     iteration_idx = 0
-    commit = True
+    commit: bool = True
     expected_frame_nr: int = 0
     while producer.is_alive():
         if GlobalState.has_hw():
             try:
                 radar_idx, step, frame_nr, result = receive_radar_result()
-                # check_received_meta_data(iteration_idx, radar_idx)
+                logger.debug(f"received idx {radar_idx}, step {step}, frame_nr {frame_nr}")
                 if expected_frame_nr != frame_nr:
                     logger.error(f"Expected frame number {expected_frame_nr}, received frame number {frame_nr}")
+                    raise Exception(f"Expected frame number {expected_frame_nr}, received frame number {frame_nr}")
                 expected_frame_nr += 1
-
-                commit, previous_step = enqueue_received(radar_idx, step, previous_step, commit, result)
+                idx = frame_nr % get_result_range().stop
+                if radar_idx != idx:
+                    ref_idx = iteration_idx % get_result_range().stop
+                    logger.error(f"radar_idx = {radar_idx}, idx = {idx}, ref_idx = {ref_idx}")
+                    raise Exception(f"radar_idx = {radar_idx}, idx = {idx}, ref_idx = {ref_idx}")
+                commit, previous_step = enqueue_received(idx, frame_nr, previous_step, commit, result)
                 update_status(timer, iteration_idx)
                 iteration_idx += 1
             except OutputEmpty:
