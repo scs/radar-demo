@@ -185,7 +185,7 @@ def receive_result() -> NDArray[np.int16]:
 def receive_data():
     logger.debug("Entering")
     global count
-    while sender.is_alive():
+    while not stop_receiver.is_set():
         if GlobalState.has_hw():
             try:
                 fft_data = receive_result()
@@ -194,7 +194,6 @@ def receive_data():
                     receive_queue.put(fft_data)
             except OutputEmpty:
                 time.sleep(0.01)
-                pass
         else:
             time.sleep(0.1)
 
@@ -238,7 +237,7 @@ def create_frame(fft_data: NDArray[np.float32]):
 
 
 def hw_stream():
-    while receiver.is_alive() and not GlobalState.is_stopped() and GlobalState.use_hw():
+    while not stop_converter.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
         fft_data = None
         while not receive_queue.empty():
             fft_data = receive_queue.get()
@@ -254,7 +253,7 @@ def hw_stream():
 
 def sw_stream():
     logger.debug("Entering")
-    while receiver.is_alive() and not GlobalState.is_stopped() and not GlobalState.use_hw():
+    while not stop_converter.is_set() and not GlobalState.is_stopped() and not GlobalState.use_hw():
         signal_timer = Timer(name="signal generation")
         signal = get_current_signal(SAMPLES, AMPLITUDE)
         signal_timer.log_time()
@@ -272,7 +271,7 @@ def stopped_stream():
     logger.debug("Entering")
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
     flush_queue(receive_queue)
-    while receiver.is_alive() and GlobalState.is_stopped():
+    while not stop_converter.is_set() and GlobalState.is_stopped():
         flush_queue(receive_queue)
         benchmark_info.reset_frame_rate
         frame = STATIC_CONFIG.stopped_buf
