@@ -312,15 +312,17 @@ def flush_output_buffers() -> None:
     if STATIC_CONFIG.versal_lib:
         eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
         eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+        logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
         while eib != 8 and eob != 8:
             try:
                 _, _, _, _ = receive_radar_result()
                 eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
                 eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
                 stop = time.time()
+                logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
                 if stop - start > 2:
                     start = time.time()
-                    logger.warning(f"[{eib}] empty buffers\n[{eob}] empty buffers")
+                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
             except OutputEmpty:
                 continue
 
