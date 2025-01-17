@@ -130,6 +130,10 @@ class GlobalState:
         return cls.get_current_device() != ComputePlatform.PC_EMULATION.value and STATIC_CONFIG.versal_lib is not None
 
     @classmethod
+    def use_sw(cls) -> bool:
+        return cls.get_current_device() == ComputePlatform.PC_EMULATION.value
+
+    @classmethod
     def has_hw(cls) -> bool:
         return STATIC_CONFIG.versal_lib is not None
 
