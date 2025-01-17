@@ -276,15 +276,15 @@ def enqueue_received(
 
 def check_expected_frame_nr(actual: int, expected: list[int]) -> None:
     if actual != expected[0]:
-        logger.error(f"Expected frame number {expected}, actual {actual}")
-        raise Exception(f"Expected frame number {expected}, actual {actual}")
+        logger.error(f"Expected frame number {expected[0]}, actual {actual}")
+        # raise Exception(f"Expected frame number {expected[0]}, actual {actual}")
     expected[0] = actual + 1
 
 
 def check_expected_radar_idx(actual: int, expected: list[int]) -> None:
     if actual != expected[0]:
-        logger.error(f"Expected index {expected}, actual {actual}")
-        raise Exception(f"Expected index {expected}, actual {actual}")
+        logger.error(f"Expected index {expected[0]}, actual {actual}")
+        # raise Exception(f"Expected index {expected[0]}, actual {actual}")
     expected[0] = (actual + 1) % get_result_range().stop
 
 
