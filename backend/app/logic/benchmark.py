@@ -198,16 +198,30 @@ def receive_data():
         else:
             time.sleep(0.1)
 
+    start = time.time()
     if STATIC_CONFIG.versal_lib:
         eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-        eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+        eob: int = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
+        logger.info(f"[{eib}] empty input buffers\n[{eob}] empty output buffers")
         while eib != 8 and eob != 8:
             try:
                 _ = receive_result()
                 eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-                eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
+                stop = time.time()
+                logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
+                if stop - start > 2:
+                    start = time.time()
+                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
             except OutputEmpty:
+                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
+                stop = time.time()
+                if stop - start > 2:
+                    start = time.time()
+                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
                 continue
+
     stop_converter.set()
     logger.debug("Leaving")
 

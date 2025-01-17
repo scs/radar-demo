@@ -309,21 +309,29 @@ def make_check(update: Callable[[int], int]) -> Callable[[int], None]:
 
 def flush_output_buffers() -> None:
     start = time.time()
+
     if STATIC_CONFIG.versal_lib:
         eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-        eob: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-        logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
+        eob: int = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
+        logger.info(f"[{eib}] empty input buffers\n[{eob}] empty output buffers")
         while eib != 8 and eob != 8:
             try:
                 _, _, _, _ = receive_radar_result()
                 eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-                eob = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
                 stop = time.time()
                 logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
                 if stop - start > 2:
                     start = time.time()
                     logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
             except OutputEmpty:
+                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
+                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
+                stop = time.time()
+                logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
+                if stop - start > 2:
+                    start = time.time()
+                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
                 continue
 
 
