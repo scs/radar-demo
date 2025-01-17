@@ -80,7 +80,7 @@ converter_run = threading.Event()
 stop_lock: threading.Lock = threading.Lock()
 start_lock: threading.Lock = threading.Lock()
 
-send_count: threading.Semaphore = threading.Semaphore()
+send_count: threading.Semaphore = threading.Semaphore(0)
 
 gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), threading.Event()]
 

@@ -37,7 +37,7 @@ stop_producer = threading.Event()
 stop_receiver = threading.Event()
 stop_converter = threading.Event()
 
-send_count = threading.Semaphore()
+send_count = threading.Semaphore(0)
 
 AMPLITUDE = 32
 SAMPLES = 512
