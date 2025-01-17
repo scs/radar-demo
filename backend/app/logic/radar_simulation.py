@@ -252,26 +252,38 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
     )
 
 
-def update_status(timer: Timer, count: list[int]) -> None:
-    INTEGRATION_TIME = 2 * 4
-    if count[0] % INTEGRATION_TIME == 0:
-        range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration() / get_result_range().stop)
-    count[0] += 1
+def make_update() -> Callable[[Timer], None]:
+    count = 0
+
+    def update_status(timer: Timer) -> None:
+        nonlocal count
+        INTEGRATION_TIME = 2 * 4
+        if count % INTEGRATION_TIME == 0:
+            range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration() / get_result_range().stop)
+        count += 1
+
+    return update_status
 
 
-def enqueue_received(
-    radar_idx: int, step: int, previous_step: list[int], commit: list[bool], data: NDArray[np.int16]
-) -> None:
-    logger.debug(f"Enqueu for idx = {radar_idx}")
-    # pre condition
-    if radar_idx == 0:
-        commit[0] = not receive_queues.anyfull() and step != previous_step[0]
-        logger.debug(f"Commit is being set to {commit}, send_step = {step}")
-        previous_step[0] = step
+def make_enqueue() -> Callable[[int, int, NDArray[np.int16]], None]:
+    previous_step = -1
+    commit = True
 
-    if commit:
-        logger.debug(f"Commiting for queue {radar_idx}")
-        receive_queues[radar_idx].put(data)
+    def enqueue(radar_idx: int, step: int, data: NDArray[np.int16]) -> None:
+        nonlocal commit
+        nonlocal previous_step
+        logger.debug(f"Enqueu for idx = {radar_idx}")
+        # pre condition
+        if radar_idx == 0:
+            commit = not receive_queues.anyfull() and step != previous_step
+            logger.debug(f"Commit is being set to {commit}, send_step = {step}")
+            previous_step = step
+
+        if commit:
+            logger.debug(f"Commiting for queue {radar_idx}")
+            receive_queues[radar_idx].put(data)
+
+    return enqueue
 
 
 def check_expected_frame_nr(actual: int, expected: list[int]) -> None:
@@ -281,11 +293,18 @@ def check_expected_frame_nr(actual: int, expected: list[int]) -> None:
     expected[0] = actual + 1
 
 
-def check_expected_radar_idx(actual: int, expected: list[int]) -> None:
-    if actual != expected[0]:
-        logger.error(f"Expected index {expected[0]}, actual {actual}")
-        # raise Exception(f"Expected index {expected[0]}, actual {actual}")
-    expected[0] = (actual + 1) % get_result_range().stop
+def make_check(update: Callable[[int], int]) -> Callable[[int], None]:
+    expected = 0
+
+    def check_expected(actual: int) -> None:
+        nonlocal expected
+        if actual != expected:
+            logger.error(f"Expected index {expected}, actual {actual}")
+            # raise Exception(f"Expected index {expected[0]}, actual {actual}")
+        expected = update(actual)
+        # expected = (actual + 1) % get_result_range().stop
+
+    return check_expected
 
 
 def flush_output_buffers() -> None:
@@ -309,15 +328,19 @@ def flush_output_buffers() -> None:
 def receiver() -> None:
     logger.debug("Entering")
     timer = Timer(name="receive loop")
+    check_frame_nr = make_check(lambda x: x + 1)
+    check_radar_idx = make_check(lambda x: (x + 1) % get_result_range().stop)
+    enqueue_received = make_enqueue()
+    update_status = make_update()
     while receiver_run.is_set():
         if GlobalState.has_hw():
             try:
                 radar_idx, step, frame_nr, data = receive_radar_result()
                 logger.debug(f"received idx {radar_idx}, step {step}, frame_nr {frame_nr}")
-                check_expected_radar_idx(radar_idx, [0])
-                check_expected_frame_nr(frame_nr, [0])
-                enqueue_received(radar_idx, step, [-1], [True], data)
-                update_status(timer, [0])
+                check_radar_idx(radar_idx)
+                check_frame_nr(frame_nr)
+                enqueue_received(radar_idx, step, data)
+                update_status(timer)
             except OutputEmpty:
                 time.sleep(0.008)  # wait for 8 ms (half the time that one cycle should take)
         else:
