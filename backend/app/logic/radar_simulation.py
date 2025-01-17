@@ -361,7 +361,13 @@ def receiver() -> None:
             time.sleep(0.1)
 
     while send_count.acquire(blocking=False):
-        _, _, _, _ = receive_radar_result()
+        received = False
+        while not received:
+            try:
+                _, _, _, _ = receive_radar_result()
+                received = True
+            except OutputEmpty:
+                time.sleep(0.01)
 
     buffer_status(LogLevel.INFO)
 

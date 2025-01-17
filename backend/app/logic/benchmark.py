@@ -204,7 +204,13 @@ def receive_data():
             time.sleep(0.1)
 
     while send_count.acquire(blocking=False):
-        _ = receive_result()
+        received = False
+        while not received:
+            try:
+                _ = receive_result()
+                received = True
+            except OutputEmpty:
+                time.sleep(0.01)
 
     buffer_status(LogLevel.INFO)
 
