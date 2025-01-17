@@ -15,6 +15,7 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from app.logic.config import STATIC_CONFIG
+from app.logic.flush_card import buffer_status
 from app.logic.logging import LogLevel, get_logger
 from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
@@ -35,6 +36,8 @@ result_queue = queue.Queue(maxsize=2)
 stop_producer = threading.Event()
 stop_receiver = threading.Event()
 stop_converter = threading.Event()
+
+send_count = threading.Semaphore()
 
 AMPLITUDE = 32
 SAMPLES = 512
@@ -121,6 +124,8 @@ def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_siz
                 data_size_in_bytes,
                 batch_size,
             )
+            if err == 0:
+                send_count.release()
         else:
             # logger.warning("No empty input buffers available")
             raise InputFull()
@@ -189,6 +194,7 @@ def receive_data():
         if GlobalState.has_hw():
             try:
                 fft_data = receive_result()
+                _ = send_count.acquire()
                 count = count + 1
                 if not receive_queue.full():
                     receive_queue.put(fft_data)
@@ -197,29 +203,10 @@ def receive_data():
         else:
             time.sleep(0.1)
 
-    start = time.time()
-    if STATIC_CONFIG.versal_lib:
-        eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-        eob: int = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
-        logger.info(f"[{eib}] empty input buffers\n[{eob}] empty output buffers")
-        while eib != 8 and eob != 8:
-            try:
-                _ = receive_result()
-                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
-                stop = time.time()
-                logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
-                if stop - start > 2:
-                    start = time.time()
-                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
-            except OutputEmpty:
-                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
-                stop = time.time()
-                if stop - start > 2:
-                    start = time.time()
-                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
-                continue
+    while send_count.acquire(blocking=False):
+        _ = receive_result()
+
+    buffer_status(LogLevel.INFO)
 
     stop_converter.set()
     logger.debug("Leaving")

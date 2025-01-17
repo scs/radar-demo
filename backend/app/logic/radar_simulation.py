@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 
 from app.logic.cfar import cfar
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import eib, eob, oib, oob
+from app.logic.flush_card import buffer_status, eib, eob, oib, oob
 from app.logic.image_utils import create_frame, heat_map, norm_image
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
@@ -79,6 +79,8 @@ converter_run = threading.Event()
 # locks to make sure only one of the multiple gen_frames can start / stop the threads
 stop_lock: threading.Lock = threading.Lock()
 start_lock: threading.Lock = threading.Lock()
+
+send_count: threading.Semaphore = threading.Semaphore()
 
 gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), threading.Event()]
 
@@ -180,6 +182,7 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
             for _ in range(3):  # Try max three times to send the same data
                 err = STATIC_CONFIG.versal_lib.send_scene(idx, frame_nr, step[idx], num_channels, 0)
                 if err == 0:
+                    send_count.release()
                     break
 
             if err:
@@ -346,6 +349,7 @@ def receiver() -> None:
         if GlobalState.has_hw():
             try:
                 radar_idx, step, frame_nr, data = receive_radar_result()
+                _ = send_count.acquire()
                 logger.debug(f"received idx {radar_idx}, step {step}, frame_nr {frame_nr}")
                 check_radar_idx(radar_idx)
                 check_frame_nr(frame_nr)
@@ -356,9 +360,15 @@ def receiver() -> None:
         else:
             time.sleep(0.1)
 
-    flush_output_buffers()
+    while send_count.acquire(blocking=False):
+        _, _, _, _ = receive_radar_result()
+
+    buffer_status(LogLevel.INFO)
+
     converter_run.clear()
-    logger.debug("Leaving")
+    logger.debug("#################################################")
+    logger.debug("##             Leaving Reciever                ##")
+    logger.debug("#################################################")
 
 
 def synthetic_result(current_step: int, channel: int) -> NDArray[np.uint8]:

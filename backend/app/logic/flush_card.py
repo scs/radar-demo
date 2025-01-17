@@ -16,6 +16,13 @@ def flush_card(timeout_ms: int) -> bool:
     return True
 
 
+def buffer_status(level: LogLevel) -> None:
+    eib(level)
+    eob(level)
+    oib(level)
+    oob(level)
+
+
 def eib(level: LogLevel = LogLevel.NOTSET) -> None:
     if STATIC_CONFIG.versal_lib:
         val: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
