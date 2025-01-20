@@ -311,7 +311,8 @@ def receiver() -> None:
     while send_count.acquire(blocking=False):
         received = False
         while not received:
-            if log_timer.duration() > 2:
+            if log_timer.snapshot() > 2:
+                log_timer.start()
                 eib(LogLevel.ERROR)
                 eob(LogLevel.ERROR)
                 oib(LogLevel.ERROR)
