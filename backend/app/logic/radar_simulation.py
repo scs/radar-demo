@@ -287,34 +287,6 @@ def make_check(update: Callable[[int], int]) -> Callable[[int], None]:
     return check_expected
 
 
-def flush_output_buffers() -> None:
-    start = time.time()
-
-    if STATIC_CONFIG.versal_lib:
-        eib: int = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-        eob: int = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
-        logger.info(f"[{eib}] empty input buffers\n[{eob}] empty output buffers")
-        while eib != 8 and eob != 8:
-            try:
-                _, _, _, _ = receive_radar_result()
-                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
-                stop = time.time()
-                logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
-                if stop - start > 2:
-                    start = time.time()
-                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
-            except OutputEmpty:
-                eib = STATIC_CONFIG.versal_lib.num_empty_input_buffers()
-                eob = STATIC_CONFIG.versal_lib.num_empty_output_buffers()
-                stop = time.time()
-                logger.info(f"[{eib}] empty buffers\n[{eob}] empty buffers")
-                if stop - start > 2:
-                    start = time.time()
-                    logger.error(f"[{eib}] empty buffers\n[{eob}] empty buffers")
-                continue
-
-
 def receiver() -> None:
     timer = Timer(name="receive loop")
     check_frame_nr = make_check(lambda x: x + 1)
@@ -335,9 +307,15 @@ def receiver() -> None:
         else:
             time.sleep(0.1)
 
+    log_timer = Timer(name="LogTim")
     while send_count.acquire(blocking=False):
         received = False
         while not received:
+            if log_timer.duration() > 2:
+                eib(LogLevel.ERROR)
+                eob(LogLevel.ERROR)
+                oib(LogLevel.ERROR)
+                oob(LogLevel.ERROR)
             try:
                 _, _, _, _ = receive_radar_result()
                 received = True
