@@ -195,12 +195,6 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
     return frame_nr
 
 
-def current_send_step() -> int:
-    current_steps = GlobalState.get_current_steps()
-    send_step = int(current_steps[3])
-    return int(send_step)
-
-
 def sender():
     logger.debug("Entering")
     timer: Timer = Timer("send_radar_scene")
