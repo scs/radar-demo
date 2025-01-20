@@ -90,57 +90,47 @@ gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), thr
 
 
 def flush_queues() -> None:
-    logger.debug("Entering")
     receive_queues.flush()
     result_queues.flush()
     # _ = flush_card(400)
-    logger.debug("Leaving")
 
 
-def start_threads(idx: int) -> None:
-    logger.debug(f"Entering START THREADS with idx = {idx}")
+def start_threads() -> None:
     global sender_thread
     global receiver_thread
     global converter_thread
-    logger.debug("Wait for mutex")
     if start_lock.acquire(blocking=False):
         producer_run.set()
         receiver_run.set()
         converter_run.set()
         flush_queues()
-        logger.debug(f"-- Mutex aquired for thread with id = {idx} --")
         sender_thread = threading.Thread(target=sender, name="producer")
         sender_thread.start()
         receiver_thread = threading.Thread(target=receiver, name="consumer")
         receiver_thread.start()
         converter_thread = threading.Thread(target=converter, name="converter")
         converter_thread.start()
-    logger.debug(f"Leaving START THREADS with idx = {idx}")
 
 
-def stop_threads(idx: int) -> None:
-    logger.debug(f"Entering STOP THREADS with idx = {idx}")
+def stop_threads() -> None:
     _ = stop_lock.acquire()
     if start_lock.locked():
+        logger.info("Stop Threads")
         producer_run.clear()
-        logger.info("set stop_producer")
         sender_thread.join()
         receiver_thread.join()
         converter_thread.join()
 
         range_doppler_info.reset()
 
-        logger.debug("Releasing mutex")
         start_lock.release()
     stop_lock.release()
-    logger.debug(f"Leaving STOP THREADS with idx = {idx}")
 
 
 def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]
-    logger.debug(f"Entering GEN FRAMES with idx = {idx}")
     gen_frames_state[idx].set()
 
-    start_threads(idx)
+    start_threads()
 
     while not GlobalState.stop_producer.is_set():
         try:
@@ -150,8 +140,7 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
             time.sleep(0.001)
             continue
 
-    logger.debug(f"[{idx}] Stopping threads {GlobalState.get_current_model()}")
-    stop_threads(idx)
+    stop_threads()
     gen_frames_state[idx].clear()
     if idx == 0:
         while any([x.is_set() for x in gen_frames_state]):
@@ -160,7 +149,6 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
                     logger.warning(f"state is set of [{i}] = {s.is_set()}")
                 time.sleep(0.001)
         GlobalState.stop_producer.clear()
-    logger.debug(f"Leaving GEN FRAMES with idx = {idx}")
 
 
 def send_scene(timeout_ms: float, frame_nr: int) -> int:
@@ -169,7 +157,6 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
     timeout = Timer("send_timeout")
     for idx in get_result_range():
         timeout.start()  # each radar has the same timeout
-        logger.debug(f"sending idx = [{idx}] step = {step[idx]}")
         if STATIC_CONFIG.versal_lib:
             while not STATIC_CONFIG.versal_lib.input_ready():
                 if timeout.snapshot() / 1000 > timeout_ms:
@@ -196,7 +183,6 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
 
 
 def sender():
-    logger.debug("Entering")
     timer: Timer = Timer("send_radar_scene")
     frame_nr: int = 0
     while producer_run.is_set():
@@ -213,8 +199,8 @@ def sender():
             oob(LogLevel.INFO)
             time.sleep(0.1)
 
+    logger.info("Producer Stopped")
     receiver_run.clear()
-    logger.debug("Leaving")
 
 
 def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
@@ -269,15 +255,12 @@ def make_enqueue() -> Callable[[int, int, NDArray[np.int16]], None]:
     def enqueue(radar_idx: int, step: int, data: NDArray[np.int16]) -> None:
         nonlocal commit
         nonlocal previous_step
-        logger.debug(f"Enqueu for idx = {radar_idx}")
         # pre condition
         if radar_idx == 0:
             commit = not receive_queues.anyfull() and step != previous_step
-            logger.debug(f"Commit is being set to {commit}, send_step = {step}")
             previous_step = step
 
         if commit:
-            logger.debug(f"Commiting for queue {radar_idx}")
             receive_queues[radar_idx].put(data)
 
     return enqueue
@@ -333,7 +316,6 @@ def flush_output_buffers() -> None:
 
 
 def receiver() -> None:
-    logger.debug("Entering")
     timer = Timer(name="receive loop")
     check_frame_nr = make_check(lambda x: x + 1)
     check_radar_idx = make_check(lambda x: (x + 1) % get_result_range().stop)
@@ -344,7 +326,6 @@ def receiver() -> None:
             try:
                 radar_idx, step, frame_nr, data = receive_radar_result()
                 _ = send_count.acquire()
-                logger.debug(f"received idx {radar_idx}, step {step}, frame_nr {frame_nr}")
                 check_radar_idx(radar_idx)
                 check_frame_nr(frame_nr)
                 enqueue_received(radar_idx, step, data)
@@ -365,14 +346,11 @@ def receiver() -> None:
 
     buffer_status(LogLevel.INFO)
 
+    logger.info("Receiver Stopped")
     converter_run.clear()
-    logger.debug("#################################################")
-    logger.debug("##             Leaving Reciever                ##")
-    logger.debug("#################################################")
 
 
 def synthetic_result(current_step: int, channel: int) -> NDArray[np.uint8]:
-    logger.debug("Entering")
     timer: Timer = Timer(name="synthetic_result")
     phase: NDArray[np.float32] = 2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
     ypos: int = int((np.cos(phase + np.pi) * 0.9 + 1) / 2 * 1023)
@@ -389,7 +367,6 @@ def synthetic_result(current_step: int, channel: int) -> NDArray[np.uint8]:
     noise = np.random.randint(1, 32, intensity_image.shape, dtype=np.uint8)
     intensity_image = np.clip(intensity_image + noise, 0, 255).astype(np.uint8)
     timer.log_time()
-    logger.debug("Leaving")
     return intensity_image
 
 
@@ -401,15 +378,10 @@ def get_result_range() -> range:
 
 
 def stopped_stream() -> None:
-    logger.debug("Entering")
     result_queues.flush()
     receive_queues.flush()
     range_doppler_info.reset()
-    count = 0
     while converter_run.is_set() and GlobalState.is_stopped():
-        count += 1
-        if count % 25 == 0:
-            logger.debug("in stopped_stream")
         range_doppler_info.reset_frame_rate
         receive_queues.flush()
         stop_buf: memoryview[int] = STATIC_CONFIG.stopped_buf
@@ -417,7 +389,6 @@ def stopped_stream() -> None:
             for result_idx in get_result_range():
                 result_queues[result_idx].put(stop_buf)
         time.sleep(0.04)
-    logger.debug("Leaving")
 
 
 def shape_ok(result: NDArray[np.int16]) -> bool:
@@ -430,26 +401,20 @@ def shape_ok(result: NDArray[np.int16]) -> bool:
 def enqueue_result(idx: int, result: NDArray[np.int16]) -> None:
     if not result_queues[idx].full() and shape_ok(result):
         frame: memoryview[int] = Functor(result).bind(norm_image).bind(heat_map).bind(cfar).bind(create_frame).value
-        logger.info(f"Push to result queue{idx}")
         result_queues[idx].put(frame)
 
 
 def hw_stream():
-    logger.info("Entering")
     while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
         for idx in get_result_range():
-            logger.info(f"Fetching result from recieve queue {idx}")
             try:
                 result: NDArray[np.int16] = receive_queues[idx].get(timeout=0.06)
                 enqueue_result(idx, result)
             except queue.Empty:
                 continue
 
-    logger.info("Leaving")
-
 
 def sw_stream():
-    logger.debug("Entering")
     while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_sw():
         if not result_queues.anyfull():
             for idx in get_result_range():
@@ -461,18 +426,16 @@ def sw_stream():
                     .value
                 )
                 result_queues[idx].put(frame)
-    logger.debug("Leaving")
 
 
 def converter():
-    logger.debug("Entering")
     while converter_run.is_set():
         stopped_stream()
         hw_stream()
         sw_stream()
     receive_queues.flush()
     result_queues.flush()
-    logger.debug("Leaving")
+    logger.info("Converter Stopped")
 
 
 def export_results(intensity_image: NDArray[np.int32], current_step: int, channel: int) -> None:
@@ -480,5 +443,4 @@ def export_results(intensity_image: NDArray[np.int32], current_step: int, channe
         result_file_name = f"results/result_channel_{channel}_position_{int(current_step):04d}.bin"
         result_file_path = Path(result_file_name)
         if not result_file_path.is_file():
-            logger.debug(f"writing to file {result_file_name}")
             intensity_image.tofile(result_file_path)
