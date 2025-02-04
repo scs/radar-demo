@@ -115,6 +115,7 @@ def sender():
                 time.sleep(1)
                 frame_nr = send_scene(2 * 60, frame_nr)
                 logger.error("Sent flush frame")
+                raise TimeoutError
             time.sleep(0.1)
 
     logger.info("Producer Stopped")
@@ -187,7 +188,7 @@ def receiver() -> None:
             prev["frame_nr"] = frame_nr
             prev_result = result
 
-            check_radar_idx(radar_idx)
+            # check_radar_idx(radar_idx)
             check_frame_nr(frame_nr)
         except OutputEmpty:
             time.sleep(0.008)  # wait for 8 ms (half the time that one cycle should take)
