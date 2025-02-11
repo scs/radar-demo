@@ -9,13 +9,14 @@ import queue
 import threading
 import time
 from collections.abc import Generator
+from functools import reduce
 from pathlib import Path
 from typing import Any, Callable, Generic, TypeVar, final
 
 import numpy as np
 from numpy.typing import NDArray
 
-from app.logic.cfar import cfar
+from app.logic.cfar import cfar, cfar_hw
 from app.logic.config import STATIC_CONFIG
 from app.logic.flush_card import buffer_status, eib, eob, oib, oob
 from app.logic.image_utils import create_frame, heat_map, norm_image
@@ -203,8 +204,11 @@ def sender():
     receiver_run.clear()
 
 
-def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
-    complex_result = np.empty((1024, 512), np.int16)
+def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16], tuple[tuple[int, int], ...]]:
+
+    result_shape = (2, 1024, 512)
+    result_size = reduce(lambda x, y: x * y, result_shape)
+    complex_result: NDArray[np.int16] = np.empty(result_shape, np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
     idx = ctypes.c_uint32(0)
@@ -217,7 +221,7 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
                 ctypes.byref(idx),
                 ctypes.byref(step),
                 ctypes.byref(frame_nr),
-                1024 * 512 * ctypes.sizeof(ctypes.c_int16),
+                result_size * ctypes.sizeof(ctypes.c_int16),
                 0,
             )
             if err:
@@ -228,11 +232,18 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
             # logger.warning("No occupied output buffer available")
             raise OutputEmpty()
     timer.log_time()
-    return (
-        (idx.value, step.value, frame_nr.value, complex_result)
-        if err == 0
-        else (0, step.value, frame_nr.value, np.zeros((1024, 512)).astype(np.int16))
-    )
+
+    cfar_blob = complex_result[1].flatten()
+    cfar_header = cfar_blob[0:1]
+    num_cfar_results = (cfar_header[0] << 16) + cfar_header[1]
+    range = cfar_blob[16 : 16 + (num_cfar_results * 2) : 2]
+    doppler = cfar_blob[17 : 17 + (num_cfar_results * 2) : 2]
+    result_list: tuple[tuple[int, int], ...] = tuple(zip(range, doppler))
+
+    if err == 0:
+        return (idx.value, step.value, frame_nr.value, complex_result[0, ...], result_list)
+    else:
+        return (0, step.value, frame_nr.value, np.zeros((1024, 512)).astype(np.int16), ())
 
 
 def make_update() -> Callable[[Timer], None]:
@@ -248,11 +259,11 @@ def make_update() -> Callable[[Timer], None]:
     return update_status
 
 
-def make_enqueue() -> Callable[[int, int, NDArray[np.int16]], None]:
+def make_enqueue() -> Callable[[int, int, NDArray[np.int16], tuple[tuple[int, int], ...]], None]:
     previous_step = -1
     commit = True
 
-    def enqueue(radar_idx: int, step: int, data: NDArray[np.int16]) -> None:
+    def enqueue(radar_idx: int, step: int, data: NDArray[np.int16], cfar_results: tuple[tuple[int, int], ...]) -> None:
         nonlocal commit
         nonlocal previous_step
         # pre condition
@@ -261,7 +272,8 @@ def make_enqueue() -> Callable[[int, int, NDArray[np.int16]], None]:
             previous_step = step
 
         if commit:
-            receive_queues[radar_idx].put(data)
+            item = (data, cfar_results)
+            receive_queues[radar_idx].put(item)
 
     return enqueue
 
@@ -296,11 +308,11 @@ def receiver() -> None:
     while receiver_run.is_set():
         if GlobalState.has_hw():
             try:
-                radar_idx, step, frame_nr, data = receive_radar_result()
+                radar_idx, step, frame_nr, data, cfar_results = receive_radar_result()
                 _ = send_count.acquire()
                 check_radar_idx(radar_idx)
                 check_frame_nr(frame_nr)
-                enqueue_received(radar_idx, step, data)
+                enqueue_received(radar_idx, step, data, cfar_results)
                 update_status(timer)
             except OutputEmpty:
                 time.sleep(0.008)  # wait for 8 ms (half the time that one cycle should take)
@@ -318,7 +330,7 @@ def receiver() -> None:
                 oib(LogLevel.ERROR)
                 oob(LogLevel.ERROR)
             try:
-                _, _, _, _ = receive_radar_result()
+                _, _, _, _, _ = receive_radar_result()
                 received = True
             except OutputEmpty:
                 time.sleep(0.01)
@@ -377,9 +389,11 @@ def shape_ok(result: NDArray[np.int16]) -> bool:
     return True
 
 
-def enqueue_result(idx: int, result: NDArray[np.int16]) -> None:
+def enqueue_result(idx: int, result: NDArray[np.int16], cfar_results: tuple[tuple[int, int], ...]) -> None:
     if not result_queues[idx].full() and shape_ok(result):
-        frame: memoryview[int] = Functor(result).bind(norm_image).bind(heat_map).bind(cfar).bind(create_frame).value
+        frame: memoryview[int] = (
+            Functor(result).bind(norm_image).bind(heat_map).bind(cfar_hw(cfar_results)).bind(create_frame).value
+        )
         result_queues[idx].put(frame)
 
 
@@ -387,8 +401,8 @@ def hw_stream():
     while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
         for idx in get_result_range():
             try:
-                result: NDArray[np.int16] = receive_queues[idx].get(timeout=0.06)
-                enqueue_result(idx, result)
+                result, cfar_results = receive_queues[idx].get(timeout=0.06)
+                enqueue_result(idx, result, cfar_results)
             except queue.Empty:
                 continue
 

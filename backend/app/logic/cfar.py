@@ -1,3 +1,5 @@
+from typing import Callable
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -92,3 +94,27 @@ def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
         draw_box(rgb_image, red, shape_coord, height, width, weight, shape)
         draw_cross(rgb_image, red, shape_coord, 3 * height, 3 * width, height, width, weight, shape)
     return rgb_image
+
+
+def cfar_hw(cfar_results: tuple[tuple[int, int], ...]) -> Callable[[NDArray[np.uint8]], NDArray[np.uint8]]:
+
+    def cfar_closure(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
+        if GlobalState.cfar_enabled():
+            for coord in cfar_results:
+                red: tuple[np.uint8, np.uint8, np.uint8] = (np.uint8(255), np.uint8(0), np.uint8(0))
+                stretch: int = 1 if GlobalState.use_hw() else 2
+                if GlobalState.model == Model.QUAD_CORNER:
+                    width = 5 * stretch
+                    height = 10
+                    weight = 1
+                else:
+                    width = 3 * stretch
+                    height = 6
+                    weight = 2
+                shape = rgb_image[..., 0].shape
+                shape_coord: tuple[np.intp, ...] = tuple(np.intp(x) for x in coord)
+                draw_box(rgb_image, red, shape_coord, height, width, weight, shape)
+                draw_cross(rgb_image, red, shape_coord, 3 * height, 3 * width, height, width, weight, shape)
+        return rgb_image
+
+    return cfar_closure
