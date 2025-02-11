@@ -98,25 +98,28 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
 def sender():
     timer: Timer = Timer("send_radar_scene")
     frame_nr: int = 0
-    for i in range(1000):
-        logger.debug(f"send {i} frames in a row")
-        for _ in range(i):
-            try:
-                frame_nr = send_scene(2 * 60, frame_nr)
-                timer.log_time()
-            except InputFull:
-                continue
+    major = 0
+    while True:
+        logger.debug(f"Major iteration {major}")
+        major += 1
+        for i in range(1, 81):
+            for _ in range(i):
+                try:
+                    frame_nr = send_scene(2 * 60, frame_nr)
+                    timer.log_time()
+                except InputFull:
+                    continue
 
-        timeout = Timer(name="Timeout")
-        while send_count._value != 0:
-            if timeout.snapshot() > 4:
-                receiver_capture.set()
-                logger.error("Set capture event")
-                time.sleep(1)
-                frame_nr = send_scene(2 * 60, frame_nr)
-                logger.error("Sent flush frame")
-                raise TimeoutError
-            time.sleep(0.1)
+            timeout = Timer(name="Timeout")
+            while send_count._value != 0:
+                if timeout.snapshot() > 4:
+                    receiver_capture.set()
+                    logger.error(f"Set capture event for minor iteration {i} frame number {frame_nr}")
+                    time.sleep(1)
+                    frame_nr = send_scene(2 * 60, frame_nr)
+                    logger.error("Sent flush frame")
+                    raise TimeoutError
+                time.sleep(0.1)
 
     logger.info("Producer Stopped")
     receiver_run.clear()
@@ -182,6 +185,8 @@ def receiver() -> None:
             # if receiver_capture.is_set():
             #     export_inspect(prev_result, prev["step"], prev["radar_idx"], prev["frame_nr"])
             #     export_inspect(result, step, radar_idx, frame_nr)
+            # if step != 0:
+            #     logger.error("Step should always be 0")
 
             prev["radar_idx"] = radar_idx
             prev["step"] = step
@@ -245,8 +250,11 @@ def hash_result(intensity_image: NDArray[np.int16], step: int, radar_idx: int, f
     md5 = np.sum(intensity_image)
     ref = md5_dict[radar_idx].setdefault(step, md5)
     if ref != md5:
-        logger.error(f"MD5 error for frame {frame_nr}, radar idx = {radar_idx}, step = {step} ... {md5}")
-        # export_inspect(intensity_image, step, radar_idx, frame_nr)
+        logger.error(f"MD5 error for frame {frame_nr}, radar idx = {radar_idx}, step = {step}, sum = {md5}")
+        export_inspect(intensity_image, step, radar_idx, frame_nr)
+    if step == 0:
+        export_ref(intensity_image, step, radar_idx)
+
 
 
 def export_inspect(intensity_image: NDArray[np.int16], step: int, radar_idx: int, frame_nr: int) -> None:
