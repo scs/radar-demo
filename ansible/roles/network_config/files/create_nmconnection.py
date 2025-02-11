@@ -43,17 +43,25 @@ method=link-local
 
 """
     # Write the YAML content to a file
-    with open(f"/etc/NetworkManager/system-connections/{name}.yaml", "w") as file:
+    with open(
+        f"/etc/NetworkManager/system-connections/{name}.nmconnection", "w"
+    ) as file:
         _ = file.write(yaml_content.strip())
 
 
 def main():
-    name, uuid, interface_name = get_enx_interface_uuid()
-    if name and uuid and interface_name:
-        generate_yaml_file(name, uuid, interface_name)
-        print("Generated network-config.yaml successfully.")
-    else:
+    done = False
+    for i in range(10):
+        name, uuid, interface_name = get_enx_interface_uuid()
+        if name and uuid and interface_name:
+            generate_yaml_file(name, uuid, interface_name)
+            print("Generated network-config.nmconnection successfully.")
+            done = True
+            break
+
+    if not done:
         print("No 'enx' interface found.")
+        exit(1)
 
 
 if __name__ == "__main__":
