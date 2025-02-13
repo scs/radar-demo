@@ -229,12 +229,11 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16], tuple[tupl
                 logger.error("########           Unable to receive result           #########")
                 logger.error("###############################################################")
         else:
-            # logger.warning("No occupied output buffer available")
             raise OutputEmpty()
     timer.log_time()
 
     cfar_blob = complex_result[1].flatten()
-    cfar_header = cfar_blob[0:1]
+    cfar_header = cfar_blob[0:2]
     num_cfar_results = (cfar_header[0] << 16) + cfar_header[1]
     range = cfar_blob[16 : 16 + (num_cfar_results * 2) : 2]
     doppler = cfar_blob[17 : 17 + (num_cfar_results * 2) : 2]
@@ -294,7 +293,6 @@ def make_check(update: Callable[[int], int]) -> Callable[[int], None]:
             logger.error(f"Expected index {expected}, actual {actual}")
             # raise Exception(f"Expected index {expected[0]}, actual {actual}")
         expected = update(actual)
-        # expected = (actual + 1) % get_result_range().stop
 
     return check_expected
 
