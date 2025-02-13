@@ -27,7 +27,7 @@ from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
 
-logger = get_logger(__name__, LogLevel.WARNING)
+logger = get_logger(__name__, LogLevel.DEBUG)
 T = TypeVar("T")
 U = TypeVar("U")
 
@@ -232,14 +232,21 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16], tuple[tupl
             raise OutputEmpty()
     timer.log_time()
 
-    cfar_blob = complex_result[1].flatten()
-    cfar_header = cfar_blob[0:2]
-    num_cfar_results = (cfar_header[1] << 16) + cfar_header[0]
-    range_results = cfar_blob[16 : 16 + (num_cfar_results * 2) : 2]
-    doppler_results = cfar_blob[17 : 17 + (num_cfar_results * 2) : 2]
-    result_list: tuple[tuple[int, int], ...] = tuple(zip(range_results, doppler_results))
-
     if err == 0:
+        cfar_blob = complex_result[1].flatten()
+        cfar_header = cfar_blob[0:2]
+        high_word = cfar_header[1]
+        low_word = cfar_header[0]
+
+        num_cfar_results = (high_word << 16) + low_word
+
+        logger.debug(f"cfar num results high word = {high_word}")
+        logger.debug(f"cfar num results low word = {low_word}")
+        logger.debug(f"Number of cfar results = {num_cfar_results}")
+
+        range_results = cfar_blob[16 : 16 + (num_cfar_results * 2) : 2]
+        doppler_results = cfar_blob[17 : 17 + (num_cfar_results * 2) : 2]
+        result_list: tuple[tuple[int, int], ...] = tuple(zip(range_results, doppler_results))
         return (idx.value, step.value, frame_nr.value, complex_result[0, ...], result_list)
     else:
         return (0, step.value, frame_nr.value, np.zeros((1024, 512)).astype(np.int16), ())
