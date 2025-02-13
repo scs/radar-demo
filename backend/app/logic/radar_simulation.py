@@ -235,9 +235,9 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16], tuple[tupl
     cfar_blob = complex_result[1].flatten()
     cfar_header = cfar_blob[0:2]
     num_cfar_results = (cfar_header[0] << 16) + cfar_header[1]
-    range = cfar_blob[16 : 16 + (num_cfar_results * 2) : 2]
-    doppler = cfar_blob[17 : 17 + (num_cfar_results * 2) : 2]
-    result_list: tuple[tuple[int, int], ...] = tuple(zip(range, doppler))
+    range_results = cfar_blob[16 : 16 + (num_cfar_results * 2) : 2]
+    doppler_results = cfar_blob[17 : 17 + (num_cfar_results * 2) : 2]
+    result_list: tuple[tuple[int, int], ...] = tuple(zip(range_results, doppler_results))
 
     if err == 0:
         return (idx.value, step.value, frame_nr.value, complex_result[0, ...], result_list)
