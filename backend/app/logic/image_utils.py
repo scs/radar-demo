@@ -23,7 +23,7 @@ def convert_to_intensity_image(complex_result: NDArray[np.int16]) -> NDArray[np.
 def norm_image(image: NDArray[np.int16]) -> NDArray[np.uint8]:
     max: np.int16 = np.amax(image)
     norm_image = image / max * 255
-    return np.roll(norm_image.astype(np.uint8), 256, axis=1)
+    return norm_image.astype(np.uint8)
 
 
 def heat_map(intensity_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
