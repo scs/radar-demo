@@ -335,7 +335,6 @@ def flush_queues() -> None:
 
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
-    print("Entering gen_frames")
     loop_timer = Timer("benchmark")
     count_bak = count
 
