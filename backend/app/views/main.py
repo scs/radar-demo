@@ -41,12 +41,6 @@ def frame_number() -> Response:
     return Response(GlobalState.gen_frame_number_response(), mimetype="text/event-stream")
 
 
-def coc() -> None:
-    print("################################################################################")
-    print("#                              COC Called                                      #")
-    print("################################################################################")
-
-
 @app.route("/video_feed/<int:idx>")
 def video_feed(idx: int) -> Response:
     _ = QUAD_RADAR_LOCK[idx].acquire()
@@ -60,9 +54,6 @@ def video_feed(idx: int) -> Response:
             stop_radar_threads()
             HW_LOCK.release()
         QUAD_RADAR_LOCK[idx].release()
-        print("################################################################################")
-        print(f"#                              COC Called for idx = {idx}                          #")
-        print("################################################################################")
 
     _ = r.call_on_close(coc)
     return r
@@ -76,9 +67,6 @@ def imaging_feed() -> Response:
 
     def coc() -> None:
         stop_radar_threads()
-        print("####################################################")
-        print("#              SHORT RANGE COC                      #")
-        print("####################################################")
         HW_LOCK.release()
 
     _ = r.call_on_close(coc)
@@ -93,9 +81,6 @@ def short_range_feed() -> Response:
 
     def coc() -> None:
         stop_radar_threads()
-        print("####################################################")
-        print("#              SHORT RANGE COC                      #")
-        print("####################################################")
         HW_LOCK.release()
 
     _ = r.call_on_close(coc)
@@ -104,15 +89,12 @@ def short_range_feed() -> Response:
 
 @app.route("/benchmark_feed")
 def benchmark_feed() -> Response:
-    HW_LOCK.acquire()
+    _ = HW_LOCK.acquire()
     start_benchmark_threads()
     r = Response(gen_benchmark_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
     def coc() -> None:
         stop_benchmark_threads()
-        print("####################################################")
-        print("#              BENCHMARK COC                       #")
-        print("####################################################")
         HW_LOCK.release()
 
     _ = r.call_on_close(coc)
@@ -149,7 +131,7 @@ def init_new_model():
 
 @app.route("/leavePage", methods=["Get"])
 def leave_page():
-    logger.info("Leaving leave_page")
+    # this function is now obosolete
     return "", 200
 
 
