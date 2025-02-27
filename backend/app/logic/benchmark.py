@@ -33,9 +33,10 @@ logger = get_logger(__name__, LogLevel.WARNING)
 
 receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
 result_queue = queue.Queue(maxsize=2)
-stop_producer = threading.Event()
-stop_receiver = threading.Event()
-stop_converter = threading.Event()
+
+producer_run = threading.Event()
+receiver_run = threading.Event()
+converter_run = threading.Event()
 
 send_count = threading.Semaphore(0)
 
@@ -147,7 +148,7 @@ def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
 def send_data():
     logger.debug("Entering")
     if GlobalState.has_hw():
-        while not stop_producer.is_set():
+        while producer_run.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 signal = get_current_signal(SAMPLES, AMPLITUDE)
                 data_arangement_timer = Timer(name="Data Arangement")
@@ -173,9 +174,9 @@ def send_data():
             else:
                 time.sleep(0.1)
     else:
-        while not stop_producer.is_set():
+        while producer_run.is_set():
             time.sleep(0.1)
-    stop_receiver.set()
+    receiver_run.clear()
     logger.debug("Leaving")
 
 
@@ -190,7 +191,7 @@ def receive_result() -> NDArray[np.int16]:
 def receive_data():
     logger.debug("Entering")
     global count
-    while not stop_receiver.is_set():
+    while receiver_run.is_set():
         if GlobalState.has_hw():
             try:
                 fft_data = receive_result()
@@ -214,7 +215,7 @@ def receive_data():
 
     buffer_status(LogLevel.INFO)
 
-    stop_converter.set()
+    converter_run.clear()
     logger.debug("Leaving")
 
 
@@ -230,7 +231,7 @@ def create_frame(fft_data: NDArray[np.float32]):
 
 
 def hw_stream():
-    while not stop_converter.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
+    while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
         fft_data = None
         while not receive_queue.empty():
             fft_data = receive_queue.get()
@@ -246,7 +247,7 @@ def hw_stream():
 
 def sw_stream():
     logger.debug("Entering")
-    while not stop_converter.is_set() and not GlobalState.is_stopped() and not GlobalState.use_hw():
+    while converter_run.is_set() and not GlobalState.is_stopped() and not GlobalState.use_hw():
         signal_timer = Timer(name="signal generation")
         signal = get_current_signal(SAMPLES, AMPLITUDE)
         signal_timer.log_time()
@@ -264,7 +265,7 @@ def stopped_stream():
     logger.debug("Entering")
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
     flush_queue(receive_queue)
-    while not stop_converter.is_set() and GlobalState.is_stopped():
+    while converter_run.is_set() and GlobalState.is_stopped():
         flush_queue(receive_queue)
         benchmark_info.reset_frame_rate
         frame = STATIC_CONFIG.stopped_buf
@@ -276,7 +277,7 @@ def stopped_stream():
 
 def convert_data():
     logger.debug("Entering")
-    while not stop_converter.is_set():
+    while converter_run.is_set():
         hw_stream()
         sw_stream()
         stopped_stream()
@@ -292,9 +293,9 @@ def start_threads() -> None:
     global receiver
     global converter
     logger.debug("Wait for mutex")
-    stop_producer.clear()
-    stop_receiver.clear()
-    stop_converter.clear()
+    producer_run.set()
+    receiver_run.set()
+    converter_run.set()
     flush_queues()
     logger.debug("Mutex aquired")
     sender = threading.Thread(target=send_data, name="sender")
@@ -308,7 +309,7 @@ def start_threads() -> None:
 
 def stop_threads() -> None:
     logger.debug("Entering")
-    stop_producer.set()
+    producer_run.clear()
     sender.join()
     receiver.join()
     converter.join()
@@ -334,12 +335,11 @@ def flush_queues() -> None:
 
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
-    logger.debug("Entering")
-    start_threads()
+    print("Entering gen_frames")
     loop_timer = Timer("benchmark")
     count_bak = count
 
-    while not GlobalState.stop_producer.is_set():
+    while True:
         logger.debug(f"Model == {GlobalState.get_current_model().value}")
         try:
             frame = result_queue.get_nowait()
@@ -353,7 +353,3 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
         except queue.Empty:
             time.sleep(0.001)
             continue
-
-    stop_threads()
-    logger.debug("Leaving")
-    GlobalState.stop_producer.clear()
