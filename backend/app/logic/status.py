@@ -90,7 +90,6 @@ class HwInfo(ABC):
         data: list[dict[str, str | list[int]]] = [
             {"label": "Power", "value": f"{self.watt}"},
             {"label": "Temp", "value": f"{self.temp}"},
-            {"label": "FFT/sec", "value": self.fft_per_sec(settings)},
         ]
         if settings.get_device() != ComputePlatform.PC_EMULATION.value:
             data.append({"label": "AIE", "value": self.aie_usage(settings)})
@@ -160,6 +159,13 @@ class Fft1DInfo(HwInfo):
         else:
             return f"{self.fft_per_sec_int(settings):,}"
 
+    def get_info(self, settings: Settings):  # pyright: ignore [reportImplicitOverride]
+        data = super().get_info(settings)
+        data.append(
+            {"label": "FFT/sec", "value": self.fft_per_sec(settings)},
+        )
+        return data
+
 
 @dataclass
 class RangeDopplerInfo(HwInfo):
@@ -215,6 +221,12 @@ class RangeDopplerInfo(HwInfo):
                 "label": "FPS",
                 "value": f"{self.int2str(self.fps)} fps",
             }
+        )
+        data.append(
+            {"label": "Doppler FFT/sec", "value": f"{self.doppler_fft_per_sec_int(settings):,}"},
+        )
+        data.append(
+            {"label": "Range FFT/sec", "value": f"{self.range_fft_per_sec_int(settings):,}"},
         )
         return data
 
