@@ -100,9 +100,9 @@ def sender():
     frame_nr: int = 0
     major = 0
     while True:
-        logger.debug(f"Major iteration {major}")
         major += 1
         for i in range(1, 81):
+            logger.debug(f"Major iteration {major} Minor iteration {i}")
             for _ in range(i):
                 try:
                     frame_nr = send_scene(2 * 60, frame_nr)
