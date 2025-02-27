@@ -47,7 +47,7 @@ class GlobalState:
     offsets: list[tuple[int, int, int]] = [(0, 0, 0)] * 4
     page_state: PageState = PageState.LEFT
     running_lock: threading.Lock = threading.Lock()
-    stop_producer: threading.Event = threading.Event()
+    run_producer: threading.Event = threading.Event()
 
     @classmethod
     def to_dict(cls):

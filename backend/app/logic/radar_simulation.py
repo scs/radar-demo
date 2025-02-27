@@ -76,10 +76,6 @@ producer_run = threading.Event()
 receiver_run = threading.Event()
 converter_run = threading.Event()
 
-# locks to make sure only one of the multiple gen_frames can start / stop the threads
-stop_lock: threading.Lock = threading.Lock()
-start_lock: threading.Lock = threading.Lock()
-
 send_count: threading.Semaphore = threading.Semaphore(0)
 
 gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), threading.Event()]
@@ -99,56 +95,29 @@ def start_threads() -> None:
     global sender_thread
     global receiver_thread
     global converter_thread
-    if start_lock.acquire(blocking=False):
-        producer_run.set()
-        receiver_run.set()
-        converter_run.set()
-        flush_queues()
-        sender_thread = threading.Thread(target=sender, name="producer")
-        sender_thread.start()
-        receiver_thread = threading.Thread(target=receiver, name="consumer")
-        receiver_thread.start()
-        converter_thread = threading.Thread(target=converter, name="converter")
-        converter_thread.start()
-
-
-def stop_threads() -> None:
-    _ = stop_lock.acquire()
-    if start_lock.locked():
-        logger.info("Stop Threads")
-        producer_run.clear()
-        sender_thread.join()
-        receiver_thread.join()
-        converter_thread.join()
-
-        range_doppler_info.reset()
-
-        start_lock.release()
-    stop_lock.release()
+    producer_run.set()
+    receiver_run.set()
+    converter_run.set()
+    flush_queues()
+    sender_thread = threading.Thread(target=sender, name="producer")
+    sender_thread.start()
+    receiver_thread = threading.Thread(target=receiver, name="consumer")
+    receiver_thread.start()
+    converter_thread = threading.Thread(target=converter, name="converter")
+    converter_thread.start()
 
 
 def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [reportExplicitAny]
-    gen_frames_state[idx].set()
+    if idx == 0:
+        start_threads()
 
-    start_threads()
-
-    while not GlobalState.stop_producer.is_set():
+    while GlobalState.run_producer.is_set():
         try:
             frame = result_queues[idx].get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
         except queue.Empty:
             time.sleep(0.001)
             continue
-
-    stop_threads()
-    gen_frames_state[idx].clear()
-    if idx == 0:
-        while any([x.is_set() for x in gen_frames_state]):
-            for i, s in enumerate(gen_frames_state):
-                if s.is_set():
-                    logger.warning(f"state is set of [{i}] = {s.is_set()}")
-                time.sleep(0.001)
-        GlobalState.stop_producer.clear()
 
 
 def send_scene(timeout_ms: float, frame_nr: int) -> int:
@@ -185,7 +154,7 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
 def sender():
     timer: Timer = Timer("send_radar_scene")
     frame_nr: int = 0
-    while producer_run.is_set():
+    while GlobalState.run_producer.is_set():
         if GlobalState.use_hw() and GlobalState.is_running():
             try:
                 frame_nr = send_scene(2 * 60, frame_nr)
@@ -415,6 +384,8 @@ def converter():
     receive_queues.flush()
     result_queues.flush()
     logger.info("Converter Stopped")
+    range_doppler_info.reset()
+    GlobalState.running_lock.release()
 
 
 def export_results(intensity_image: NDArray[np.int32], current_step: int, channel: int) -> None:

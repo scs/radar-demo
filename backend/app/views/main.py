@@ -15,6 +15,8 @@ from app.logic.status import gen_radar_data
 # Module Global Variables
 #
 LEAVE_PAGE_LOCK: threading.Lock = threading.Lock()
+STREAM_LOCK: threading.Lock = threading.Lock()
+
 logger = get_logger(__name__, LogLevel.WARNING)
 
 
@@ -37,26 +39,46 @@ def frame_number() -> Response:
 
 @app.route("/video_feed/<int:idx>")
 def video_feed(idx: int) -> Response:
+    _ = STREAM_LOCK.acquire(blocking=False)
     if idx == 0:
+        _leave_page()
         _ = GlobalState.running_lock.acquire()
+        GlobalState.run_producer.set()
+        STREAM_LOCK.release()
+    else:
+        while STREAM_LOCK.locked():
+            sleep(0.01)
+
     return Response(gen_radar_frames(idx), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.route("/imaging_feed")
 def imaging_feed() -> Response:
+    _ = STREAM_LOCK.acquire()
+    _leave_page()
     _ = GlobalState.running_lock.acquire()
+    GlobalState.run_producer.set()
+    STREAM_LOCK.release()
     return Response(gen_radar_frames(0), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.route("/short_range_feed")
 def short_range_feed() -> Response:
+    _ = STREAM_LOCK.acquire()
+    _leave_page()
     _ = GlobalState.running_lock.acquire()
+    GlobalState.run_producer.set()
+    STREAM_LOCK.release()
     return Response(gen_radar_frames(0), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.route("/benchmark_feed")
 def benchmark_feed() -> Response:
+    _ = STREAM_LOCK.acquire()
+    _leave_page()
     _ = GlobalState.running_lock.acquire()
+    GlobalState.run_producer.set()
+    STREAM_LOCK.release()
     return Response(gen_benchmark_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
@@ -90,6 +112,10 @@ def init_new_model():
 
 @app.route("/leavePage", methods=["Get"])
 def leave_page():
+    return "", 200
+
+
+def _leave_page():
     logger.info("Entering leave_page")
 
     def timeout(start: float) -> bool:
@@ -99,19 +125,15 @@ def leave_page():
 
     _ = LEAVE_PAGE_LOCK.acquire()  # this is to make sure that multiple calls to this function do not mess things up
 
-    if GlobalState.running_lock.locked():
-        GlobalState.stop_producer.set()
+    while GlobalState.running_lock.locked():
+        GlobalState.run_producer.clear()
         start: float = time()
-        while GlobalState.stop_producer.is_set():
-            if timeout(start):  # [seconds]
-                logger.error("Unable to stop producer")
-                break
-
-        GlobalState.running_lock.release()
+        if timeout(start):  # [seconds]
+            logger.error("Unable to stop producer")
+            break
 
     LEAVE_PAGE_LOCK.release()
     logger.info("Leaving leave_page")
-    return "", 200
 
 
 @app.route("/initApp", methods=["GET"])

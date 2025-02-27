@@ -147,7 +147,7 @@ def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
 def send_data():
     logger.debug("Entering")
     if GlobalState.has_hw():
-        while not stop_producer.is_set():
+        while GlobalState.run_producer.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
                 signal = get_current_signal(SAMPLES, AMPLITUDE)
                 data_arangement_timer = Timer(name="Data Arangement")
@@ -285,6 +285,10 @@ def convert_data():
     flush_queue(result_queue)  # pyright: ignore [reportUnknownArgumentType]
     logger.debug("Leaving")
 
+    benchmark_info.reset()
+    flush_queues()
+    GlobalState.running_lock.release()
+
 
 def start_threads() -> None:
     logger.debug("Entering")
@@ -303,17 +307,6 @@ def start_threads() -> None:
     receiver.start()
     converter = threading.Thread(target=convert_data, name="converter")
     converter.start()
-    logger.debug("Leaving")
-
-
-def stop_threads() -> None:
-    logger.debug("Entering")
-    stop_producer.set()
-    sender.join()
-    receiver.join()
-    converter.join()
-    flush_queues()
-    benchmark_info.reset()
     logger.debug("Leaving")
 
 
@@ -339,7 +332,7 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
     loop_timer = Timer("benchmark")
     count_bak = count
 
-    while not GlobalState.stop_producer.is_set():
+    while GlobalState.run_producer.is_set():
         logger.debug(f"Model == {GlobalState.get_current_model().value}")
         try:
             frame = result_queue.get_nowait()
@@ -354,6 +347,4 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
             time.sleep(0.001)
             continue
 
-    stop_threads()
     logger.debug("Leaving")
-    GlobalState.stop_producer.clear()
