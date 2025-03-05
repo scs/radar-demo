@@ -125,8 +125,8 @@ class Fft1DInfo(HwInfo):
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         map_min_time = {
-            512: 0.0000008,
-            1024: 0.0000016,
+            512: 0.0000009,
+            1024: 0.0000018,
         }
 
         device = settings.get_device()
