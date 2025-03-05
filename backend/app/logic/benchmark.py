@@ -115,13 +115,14 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
 fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
 
 
-def send_1d_fft_data(data: NDArray[np.int16], data_size_in_bytes: int, batch_size: int) -> int:
+def send_1d_fft_data(position: int, num_parallel: int, data_size_in_bytes: int, batch_size: int) -> int:
     logger.debug("Entering")
     err = 1
     if STATIC_CONFIG.versal_lib:
         if STATIC_CONFIG.versal_lib.input_ready():
             err: int = STATIC_CONFIG.versal_lib.send_1d_fft_data(
-                data.ctypes,
+                position,
+                num_parallel,
                 data_size_in_bytes,
                 batch_size,
             )
@@ -150,18 +151,12 @@ def send_data():
     if GlobalState.has_hw():
         while producer_run.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
-                signal = get_current_signal(SAMPLES, AMPLITUDE)
-                data_arangement_timer = Timer(name="Data Arangement")
                 batch_size = GlobalState.get_current_batch_size()
-                hw_data = np.zeros((SAMPLES, 2))
-                hw_data[..., 0] = signal.real
-                hw_data[..., 1] = signal.imag
-                hw_data = hw_data.astype(np.int16)
-                data_arangement_timer.log_time()
                 send_timer = Timer(name="PCIe Send")
                 try:
                     err = send_1d_fft_data(
-                        hw_data,
+                        GlobalState.get_current_steps()[0],
+                        1,
                         2 * SAMPLES * ctypes.sizeof(ctypes.c_int16),
                         batch_size,
                     )
