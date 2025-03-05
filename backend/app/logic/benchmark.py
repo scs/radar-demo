@@ -43,7 +43,7 @@ send_count = threading.Semaphore(0)
 AMPLITUDE = 32
 SAMPLES = 512
 SCALE = SAMPLES * AMPLITUDE
-count = 0
+Count = 0
 
 
 #
@@ -190,13 +190,13 @@ def receive_result() -> NDArray[np.int16]:
 
 def receive_data():
     logger.debug("Entering")
-    global count
+    global Count
     while receiver_run.is_set():
         if GlobalState.has_hw():
             try:
                 fft_data = receive_result()
                 _ = send_count.acquire()
-                count = count + 1
+                Count = Count + 1
                 if not receive_queue.full():
                     receive_queue.put(fft_data)
             except OutputEmpty:
@@ -336,7 +336,8 @@ def flush_queues() -> None:
 
 def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicitAny]
     loop_timer = Timer("benchmark")
-    count_bak = count
+    global Count
+    count_bak = Count
 
     while True:
         logger.debug(f"Model == {GlobalState.get_current_model().value}")
@@ -344,10 +345,11 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
             frame = result_queue.get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
 
-            # calculate speed for hw
-            count_current = count
-            benchmark_info.fps = int(1 / loop_timer.duration() * (count_current - count_bak))
-            count_bak = count_current
+            if loop_timer.snapshot() > 0.2:
+                # calculate speed for hw
+                count_current = Count
+                benchmark_info.fps = int(1 / loop_timer.duration() * (count_current - count_bak))
+                count_bak = count_current
 
         except queue.Empty:
             time.sleep(0.001)
