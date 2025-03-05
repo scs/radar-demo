@@ -115,12 +115,13 @@ def setup_plot(samples: int, amplitude: int) -> tuple[Figure, Line2D, NDArray[np
 fig, line, x, maxval = setup_plot(SAMPLES, AMPLITUDE)
 
 
-def send_1d_fft_data(position: int, num_parallel: int, data_size_in_bytes: int, batch_size: int) -> int:
+def send_1d_fft_data(frame: int, position: int, num_parallel: int, data_size_in_bytes: int, batch_size: int) -> int:
     logger.debug("Entering")
     err = 1
     if STATIC_CONFIG.versal_lib:
         if STATIC_CONFIG.versal_lib.input_ready():
             err: int = STATIC_CONFIG.versal_lib.send_1d_fft_data(
+                frame,
                 position,
                 num_parallel,
                 data_size_in_bytes,
@@ -148,6 +149,7 @@ def receive_1d_fft_results(data: NDArray[np.int16], size: int) -> None:
 
 def send_data():
     logger.debug("Entering")
+    frame = 0
     if GlobalState.has_hw():
         while producer_run.is_set():
             if GlobalState.use_hw() and GlobalState.is_running():
@@ -157,12 +159,13 @@ def send_data():
 
                 try:
                     err = send_1d_fft_data(
+                        frame,
                         GlobalState.get_current_steps()[0],
                         num_parallel,
                         2 * SAMPLES * ctypes.sizeof(ctypes.c_int16),
                         batch_size,
                     )
-
+                    frame += 1
                     if err != 0:
                         logger.error("Failed to send 1D FFT Data")
                 except InputFull:
