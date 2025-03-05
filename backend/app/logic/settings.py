@@ -42,6 +42,7 @@ class SettingLabel(Enum):
     DOPPLER_FFT = "Doppler FFT"
     BATCH_SIZE = "Batch Size"
     CFAR = "CFAR"
+    PARALLEL = "Parallel 10x"
 
 
 @dataclass
@@ -128,6 +129,11 @@ class Settings:
 
     def get_cfar_enabled(self) -> bool:
         if selected := self.get_selected(SettingLabel.CFAR):
+            return selected.type == "On"
+        return False
+
+    def get_parallel_10x_enabled(self) -> bool:
+        if selected := self.get_selected(SettingLabel.PARALLEL):
             return selected.type == "On"
         return False
 
@@ -230,9 +236,20 @@ cfar_setting = Setting(
     selected=Selected(type="On", option=None),
 )
 
+parallel_setting = Setting(
+    label=SettingLabel.PARALLEL,
+    valueMap=[
+        ValueMap(label="On", availableOptions=[]),
+        ValueMap(label="Off", availableOptions=[]),
+    ],
+    allOptions=[],
+    selected=Selected(type="Off", option=None),
+)
+
 benchmark_settings = Settings(name="benchmark")
 benchmark_settings.add_setting(one_d_fft)
 benchmark_settings.add_setting(batch_size_setting)
+benchmark_settings.add_setting(parallel_setting)
 benchmark_settings.add_setting(device_setting)
 
 radar_settings = Settings(name="radar")

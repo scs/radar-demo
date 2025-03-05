@@ -153,10 +153,12 @@ def send_data():
             if GlobalState.use_hw() and GlobalState.is_running():
                 batch_size = GlobalState.get_current_batch_size()
                 send_timer = Timer(name="PCIe Send")
+                num_parallel = 10 if GlobalState.parallel_10x_enabled() else 1
+
                 try:
                     err = send_1d_fft_data(
                         GlobalState.get_current_steps()[0],
-                        1,
+                        num_parallel,
                         2 * SAMPLES * ctypes.sizeof(ctypes.c_int16),
                         batch_size,
                     )

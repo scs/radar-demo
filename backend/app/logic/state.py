@@ -1,6 +1,5 @@
 # pyright: reportAny=false
 import json
-import threading
 import time
 from enum import Enum
 
@@ -69,7 +68,7 @@ class GlobalState:
             cls.settings.disable_hw()
 
         cls.running_state = RunningState.STOPPED
-        cls.page_state = PageState.LEFT
+        cls.page_state: PageState = PageState.LEFT
         cls.current_steps = [0, 0, 0, 0]
 
         cls.current_positions = np.vectorize(compute_position, signature="(),(n),(n)->()")(
@@ -113,6 +112,10 @@ class GlobalState:
     @classmethod
     def cfar_enabled(cls) -> bool:
         return cls.get_current_settings().get_cfar_enabled()
+
+    @classmethod
+    def parallel_10x_enabled(cls) -> bool:
+        return cls.get_current_settings().get_parallel_10x_enabled()
 
     @classmethod
     def get_current_batch_size(cls) -> int:
