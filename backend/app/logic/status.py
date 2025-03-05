@@ -193,12 +193,14 @@ class RangeDopplerInfo(HwInfo):
         return int(channels * fft_size * mean)
 
     def range_fft_per_sec_int(self, settings: Settings) -> int:
-        range_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
+        # for the nummer of doppler ffts we need the lehgth of the doppler fft
+        range_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
         range_size = int(range_config)
         return self.generic_fft_per_sec_int(range_size)
 
     def doppler_fft_per_sec_int(self, settings: Settings) -> int:
-        doppler_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
+        # for the nummer of doppler ffts we need the lehgth of the range fft
+        doppler_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
         doppler_size = int(doppler_config)
         return self.generic_fft_per_sec_int(doppler_size)
 
