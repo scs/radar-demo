@@ -153,7 +153,11 @@ class Fft1DInfo(HwInfo):
                 fps = np.mean(self.frame_rate)
                 batch_size = GlobalState.get_current_batch_size()
                 load = min_time * fps * batch_size * 100
-                retval[0] = min(int(load), 100)
+                if GlobalState.parallel_10x_enabled():
+                    for i in range(10):
+                        retval[i] = min(int(load), 100)
+                else:
+                    retval[0] = min(int(load), 100)
 
             return retval
 
