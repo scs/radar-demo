@@ -86,13 +86,25 @@ class HwInfo(ABC):
         else:
             return str(value)
 
+    def pl_usage(
+        self,
+    ) -> int:
+        if GlobalState.cfar_enabled():
+            return 53
+        return 52
+
+    def ps_usage(self) -> int:
+        return 3
+
     def get_info(self, settings: Settings):
-        data: list[dict[str, str | list[int]]] = [
+        data: list[dict[str, str | list[int] | int]] = [
             {"label": "Power", "value": f"{self.watt}"},
             {"label": "Temp", "value": f"{self.temp}"},
         ]
         if settings.get_device() != ComputePlatform.PC_EMULATION.value:
             data.append({"label": "AIE", "value": self.aie_usage(settings)})
+            data.append({"label": "PL", "value": self.pl_usage()})
+            data.append({"label": "PS", "value": self.ps_usage()})
         return data
 
     def format_load(self, load: float) -> str:
@@ -125,8 +137,8 @@ class Fft1DInfo(HwInfo):
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         map_min_time = {
-            512: 0.0000009,
-            1024: 0.0000018,
+            512: 0.0000008,
+            1024: 0.0000016,
         }
 
         device = settings.get_device()
@@ -173,8 +185,8 @@ class RangeDopplerInfo(HwInfo):
 
     def aie_usage(self, settings: Settings) -> list[int]:  # pyright: ignore [reportImplicitOverride]
 
-        range_max_fft_per_sec = 1 / 0.0000018
-        doppler_max_fft_per_sec = 1 / 0.0000009
+        doppler_max_fft_per_sec = 1 / 0.0000018
+        range_max_fft_per_sec = 1 / 0.0000009
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         if device == ComputePlatform.PC_EMULATION.value:
@@ -193,14 +205,12 @@ class RangeDopplerInfo(HwInfo):
         return int(channels * fft_size * mean)
 
     def range_fft_per_sec_int(self, settings: Settings) -> int:
-        # for the nummer of doppler ffts we need the lehgth of the doppler fft
-        range_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
+        range_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
         range_size = int(range_config)
         return self.generic_fft_per_sec_int(range_size)
 
     def doppler_fft_per_sec_int(self, settings: Settings) -> int:
-        # for the nummer of doppler ffts we need the lehgth of the range fft
-        doppler_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
+        doppler_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
         doppler_size = int(doppler_config)
         return self.generic_fft_per_sec_int(doppler_size)
 
@@ -216,7 +226,7 @@ class RangeDopplerInfo(HwInfo):
 
     def get_info(  # pyright: ignore [reportImplicitOverride]
         self, settings: Settings
-    ) -> list[dict[str, str | list[int]]]:
+    ) -> list[dict[str, str | list[int] | int]]:
         data = super().get_info(settings)
         data.append(
             {
@@ -225,10 +235,10 @@ class RangeDopplerInfo(HwInfo):
             }
         )
         data.append(
-            {"label": "Range FFT/sec", "value": f"{self.range_fft_per_sec_int(settings):,}"},
+            {"label": "Doppler FFT/sec", "value": f"{self.doppler_fft_per_sec_int(settings):,}"},
         )
         data.append(
-            {"label": "Doppler FFT/sec", "value": f"{self.doppler_fft_per_sec_int(settings):,}"},
+            {"label": "Range FFT/sec", "value": f"{self.range_fft_per_sec_int(settings):,}"},
         )
         return data
 
