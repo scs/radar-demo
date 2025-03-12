@@ -173,7 +173,10 @@ class Fft1DInfo(HwInfo):
         if device == ComputePlatform.PC_EMULATION.value:
             return f"{int(np.mean(self.ffts_emulation)):,}"
         else:
-            return f"{self.fft_per_sec_int(settings):,}"
+            if GlobalState.parallel_10x_enabled():
+                return f"{self.fft_per_sec_int(settings) * 10:,}"
+            else:
+                return f"{self.fft_per_sec_int(settings):,}"
 
     def get_info(self, settings: Settings):  # pyright: ignore [reportImplicitOverride]
         data = super().get_info(settings)
