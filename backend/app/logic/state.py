@@ -169,10 +169,11 @@ class GlobalState:
 
     @classmethod
     def update_settings(cls, id: int, selectedSetting: dict[str, str]) -> None:
-        for setting in GlobalState.settings:
-            if setting.id == id:
-                setting.selected.set_from_dict(selectedSetting)
-                break
+        if GlobalState.is_stopped():
+            for setting in GlobalState.settings:
+                if setting.id == id:
+                    setting.selected.set_from_dict(selectedSetting)
+                    break
 
     @classmethod
     def increment_step(cls) -> None:
