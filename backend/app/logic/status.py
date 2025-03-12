@@ -137,8 +137,8 @@ class Fft1DInfo(HwInfo):
         device = settings.get_device()
         available_aies = get_number_of_ai_elements(device)
         map_min_time = {
-            512: 0.0000008,
-            1024: 0.0000016,
+            512: 0.0000009,
+            1024: 0.0000018,
         }
 
         device = settings.get_device()
@@ -212,12 +212,12 @@ class RangeDopplerInfo(HwInfo):
         return int(channels * fft_size * mean)
 
     def range_fft_per_sec_int(self, settings: Settings) -> int:
-        range_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
+        range_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
         range_size = int(range_config)
         return self.generic_fft_per_sec_int(range_size)
 
     def doppler_fft_per_sec_int(self, settings: Settings) -> int:
-        doppler_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
+        doppler_config = settings.get_selected_option(SettingLabel.RANGE_FFT) or 1
         doppler_size = int(doppler_config)
         return self.generic_fft_per_sec_int(doppler_size)
 
