@@ -18,7 +18,7 @@ from numpy.typing import NDArray
 from app.logic.cfar import cfar
 from app.logic.config import STATIC_CONFIG
 from app.logic.flush_card import buffer_status, eib, eob, oib, oob
-from app.logic.image_utils import create_frame, heat_map, norm_image
+from app.logic.image_utils import create_frame, heat_map, norm_image, surface_plot
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
 from app.logic.output_exception import InputFull, OutputEmpty
@@ -365,7 +365,8 @@ def shape_ok(result: NDArray[np.int16]) -> bool:
 
 def enqueue_result(idx: int, result: NDArray[np.int16]) -> None:
     if not result_queues[idx].full() and shape_ok(result):
-        frame: memoryview[int] = Functor(result).bind(norm_image).bind(heat_map).bind(cfar).bind(create_frame).value
+        # frame: memoryview[int] = Functor(result).bind(norm_image).bind(heat_map).bind(cfar).bind(create_frame).value
+        frame: memoryview[int] = Functor(result).bind(norm_image).bind(surface_plot).value
         result_queues[idx].put(frame)
 
 
@@ -383,13 +384,7 @@ def sw_stream():
     while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_sw():
         if not result_queues.anyfull():
             for idx in get_result_range():
-                frame = (
-                    Functor(synthetic_result(GlobalState.get_current_steps()[idx], idx))
-                    .bind(heat_map)
-                    .bind(cfar)
-                    .bind(create_frame)
-                    .value
-                )
+                frame = Functor(synthetic_result(GlobalState.get_current_steps()[idx], idx)).bind(surface_plot).value
                 result_queues[idx].put(frame)
 
 
