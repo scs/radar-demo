@@ -6,6 +6,8 @@ subject: "Installation"
 subtitle: "User Guide"
 ---
 
+[[_TOC_]]
+
 # System Installation - Ubuntu 22.04
 
 1. Power off the system
@@ -160,6 +162,7 @@ Open a terminal by pressing and releasing the meta key (Windows Key). Start typi
 ![Open Terminal](./images/20.png "Open Terminal")
 
 Install the tools required for updateing the demo application
+
 ```console
 > sudo apt install git git-lfs ansible
 
@@ -175,6 +178,7 @@ you will be prompted for the password -> xxxxxx
 
 Open a terminal. Opening the terminal is described in [Install Essentials](#install-essentials)
 Then execute the following commands:
+
 ```console
 > cd /home/demo
 > git clone git@github.com:scs/radar-demo
@@ -191,6 +195,7 @@ Copy the repository from the stick to the demo user home directory as radar-demo
 
 Open a terminal. Opening the terminal is described in [Install Essentials](#install-essentials)
 Then execute the following commands:
+
 ```console
 > cd /home/demo/radar-demo
 > git checkout .
@@ -228,12 +233,65 @@ If prompted please input the password of the user
 
 After successful update the PC has to be power cycled (not only rebooted).
 
-## Running the application After installation a launcher is installed. One can
-call it initially by starting the desktop drawer (the drawer is launched with
-the meta key aka Windows Key). This is done with the meta (Windows) key. Then
-typing radar-demo should show an radar icon. This can be clicked or confirmed
-with enter. To keep the icon on the launcher bar, right click and click 'Add to
-Favorites'.
+## Configuring UBoot
+Using tio one can use the UART to get the console of the card. 
+
+> To be able to use tio the user has to be in the dialout group
+
+```
+> tio /dev/ttyUSB0
+```
+
+Then hit enter and you will be greeted with the login prompt. The user is root.
+There is no password required.
+```
+radar-demo login: root
+```
+
+Reboot the card and wait until you see  
+**Hit any key to stop autoboot: 5**  
+
+When interrupting autoboot you have access to the uboot parameters.
+Configure according to the used firmware version below.
+
+### New firmware bundle with separate files (Image, *.gz.u-boot, system.dtb)
+
+0. Start from the default environment
+```radar> env default -f -a```
+1. Set the boot device
+```radar> setenv boot_targets mmc1 mmc0 jtag```
+2. Set the mac address to the address on the sticker on the card
+```radar> setenv ethaddr a0:a6:5c:00:09:cc```
+3. Set the hostname with extrabootargs
+```radar> setenv extrabootargs systemd.hostname=radardemo-<yourchoice>```
+5. Set the boot script address (to be fixed in yocto)
+```radar> setenv scriptaddr 0x20000000```
+4. Save the settings
+```radar> saveenv```
+5. Boot the card
+```radar> boot```
+
+### Old firmware bundle with image.ub, 4 files
+
+1. Set the boot device
+```radar> setenv sdbootdev 1```
+2. Set the mac address to the address on the sticker on the card
+```radar> setenv ethaddr a0:a6:5c:00:09:cc```
+3. Set the boot arguments
+```radar> setenv bootargs mem=1G systemd.hostname=radardemo-<yourchoice>```
+4. Save the settings
+```radar> saveenv```
+5. Boot the card
+```radar> boot```
+
+
+## Running the application 
+
+After installation a launcher is installed. One can call it initially by
+starting the desktop drawer (the drawer is launched with the meta key aka
+Windows Key). This is done with the meta (Windows) key. Then typing radar-demo
+should show an radar icon. This can be clicked or confirmed with enter. To keep
+the icon on the launcher bar, right click and click 'Add to Favorites'.
 
 # Appendix
 
