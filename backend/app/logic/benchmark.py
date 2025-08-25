@@ -29,6 +29,7 @@ matplotlib.use("agg")
 # Module Global Variables
 #
 
+start_lock: threading.Lock = threading.Lock()
 logger = get_logger(__name__, LogLevel.WARNING)
 
 receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
@@ -293,29 +294,32 @@ def start_threads() -> None:
     global receiver
     global converter
     logger.debug("Wait for mutex")
-    producer_run.set()
-    receiver_run.set()
-    converter_run.set()
-    flush_queues()
-    logger.debug("Mutex aquired")
-    sender = threading.Thread(target=send_data, name="sender")
-    sender.start()
-    receiver = threading.Thread(target=receive_data, name="receiver")
-    receiver.start()
-    converter = threading.Thread(target=convert_data, name="converter")
-    converter.start()
-    logger.debug("Leaving")
+    if start_lock.acquire(blocking=False):
+        logger.debug("Mutex aquired")
+        producer_run.set()
+        receiver_run.set()
+        converter_run.set()
+        flush_queues()
+        sender = threading.Thread(target=send_data, name="sender")
+        sender.start()
+        receiver = threading.Thread(target=receive_data, name="receiver")
+        receiver.start()
+        converter = threading.Thread(target=convert_data, name="converter")
+        converter.start()
+        logger.debug("Leaving")
 
 
 def stop_threads() -> None:
-    logger.debug("Entering")
-    producer_run.clear()
-    sender.join()
-    receiver.join()
-    converter.join()
-    flush_queues()
-    benchmark_info.reset()
-    logger.debug("Leaving")
+    if start_lock.locked():
+        logger.debug("Entering")
+        producer_run.clear()
+        sender.join()
+        receiver.join()
+        converter.join()
+        flush_queues()
+        benchmark_info.reset()
+        logger.debug("Leaving")
+        start_lock.release()
 
 
 T = TypeVar("T")
