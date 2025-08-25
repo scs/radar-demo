@@ -8,6 +8,7 @@ from app.logic.benchmark import gen_frames as gen_benchmark_frames
 from app.logic.benchmark import start_threads as start_benchmark_threads
 from app.logic.benchmark import stop_threads as stop_benchmark_threads
 from app.logic.logging import LogLevel, get_logger
+from app.logic.model import Model
 from app.logic.radar_simulation import gen_frames as gen_radar_frames
 from app.logic.radar_simulation import start_threads as start_radar_threads
 from app.logic.radar_simulation import stop_threads as stop_radar_threads
@@ -18,7 +19,6 @@ from app.logic.status import gen_radar_data
 # Module Global Variables
 #
 HW_LOCK: threading.Lock = threading.Lock()
-QUAD_RADAR_LOCK: list[threading.Lock] = [threading.Lock(), threading.Lock(), threading.Lock(), threading.Lock()]
 
 
 logger = get_logger(__name__, LogLevel.WARNING)
@@ -38,66 +38,31 @@ def start() -> Response:
 
 @app.route("/frame_number")
 def frame_number() -> Response:
-    return Response(GlobalState.gen_frame_number_response(), mimetype="text/event-stream")
+    r = Response(GlobalState.gen_frame_number_response(), mimetype="text/event-stream")
+    return r
 
 
 @app.route("/video_feed/<int:idx>")
 def video_feed(idx: int) -> Response:
-    _ = QUAD_RADAR_LOCK[idx].acquire()
     r = Response(gen_radar_frames(idx), mimetype="multipart/x-mixed-replace; boundary=frame")
-    if idx == 0:
-        _ = HW_LOCK.acquire()
-        start_radar_threads()
-
-    def coc() -> None:
-        if idx == 0:
-            stop_radar_threads()
-            HW_LOCK.release()
-        QUAD_RADAR_LOCK[idx].release()
-
-    _ = r.call_on_close(coc)
     return r
 
 
 @app.route("/imaging_feed")
 def imaging_feed() -> Response:
-    _ = HW_LOCK.acquire()
-    start_radar_threads()
     r = Response(gen_radar_frames(0), mimetype="multipart/x-mixed-replace; boundary=frame")
-
-    def coc() -> None:
-        stop_radar_threads()
-        HW_LOCK.release()
-
-    _ = r.call_on_close(coc)
     return r
 
 
 @app.route("/short_range_feed")
 def short_range_feed() -> Response:
-    _ = HW_LOCK.acquire()
-    start_radar_threads()
     r = Response(gen_radar_frames(0), mimetype="multipart/x-mixed-replace; boundary=frame")
-
-    def coc() -> None:
-        stop_radar_threads()
-        HW_LOCK.release()
-
-    _ = r.call_on_close(coc)
     return r
 
 
 @app.route("/benchmark_feed")
 def benchmark_feed() -> Response:
-    _ = HW_LOCK.acquire()
-    start_benchmark_threads()
     r = Response(gen_benchmark_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
-
-    def coc() -> None:
-        stop_benchmark_threads()
-        HW_LOCK.release()
-
-    _ = r.call_on_close(coc)
     return r
 
 
@@ -114,18 +79,37 @@ def get_settings():
 
 @app.route("/settings", methods=["POST"])
 def post_settings():
-    data: dict[str, Any] = request.get_json()  # pyright: ignore [reportExplicitAny]
-    id: int = data["id"]
-    selectedSetting: dict[str, str] = data["selectedSetting"]
+    data: dict[str, Any] = request.get_json()  # pyright: ignore [reportExplicitAny, reportAny]
+    id: int = data["id"]  # pyright: ignore [reportAny]
+    selectedSetting: dict[str, str] = data["selectedSetting"]  # pyright: ignore [reportAny]
     GlobalState.update_settings(id, selectedSetting)
     return jsonify(GlobalState.get_current_settings().to_dict())
 
 
+def stop_threads() -> None:
+    stop_radar_threads()
+    stop_benchmark_threads()
+
+
+def start_threads() -> None:
+    if GlobalState.model == Model.ONE_D_FFT:
+        start_benchmark_threads()
+    elif GlobalState.model in [Model.SHORT_RANGE, Model.QUAD_CORNER, Model.IMAGING]:
+        start_radar_threads()
+
+
 @app.route("/initNewModel", methods=["POST"])
 def init_new_model():
-    data: dict[str, Any] = request.get_json()  # pyright: ignore [reportExplicitAny]
-    model: str = data["demoModel"]
-    GlobalState.init_state(model)
+
+    if HW_LOCK.acquire(blocking=True):
+        stop_threads()
+        data: dict[str, Any] = request.get_json()  # pyright: ignore [reportExplicitAny, reportAny]
+        model: str = data["demoModel"]  # pyright: ignore [reportAny]
+        GlobalState.init_state(model)
+        start_threads()
+
+    HW_LOCK.release()
+
     return jsonify(GlobalState.get_current_state())
 
 
