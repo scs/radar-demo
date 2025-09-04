@@ -14,8 +14,8 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
+from app.logic.buffer_status import buffer_status
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import buffer_status
 from app.logic.logging import LogLevel, get_logger
 from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
