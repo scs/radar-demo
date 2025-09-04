@@ -15,9 +15,10 @@ from typing import Any, Callable, Generic, TypeVar, final
 import numpy as np
 from numpy.typing import NDArray
 
+from app.logic.buffer_status import buffer_status
 from app.logic.cfar import cfar
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import buffer_status, eib, eob, oib, oob
+from app.logic.ctypes_data_blob import DataBlob
 from app.logic.image_utils import create_frame, heat_map, norm_image
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
@@ -179,18 +180,18 @@ def sender():
             except InputFull:
                 continue
         else:
-            eib(LogLevel.INFO)
-            eob(LogLevel.INFO)
-            oib(LogLevel.INFO)
-            oob(LogLevel.INFO)
+            buffer_status(LogLevel.INFO)
             time.sleep(0.1)
 
     logger.info("Producer Stopped")
     receiver_run.clear()
 
 
-def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
-    complex_result = np.empty((1024, 512), np.int16)
+def receive_radar_result() -> tuple[int, int, int, DataBlob]:
+    data: DataBlob = DataBlob()
+    # Initialize all data in DataBlob to zero
+    _ = ctypes.memset(ctypes.addressof(data), 0, ctypes.sizeof(data))
+    # complex_result = np.empty((1024, 512), np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
     idx = ctypes.c_uint32(0)
@@ -199,7 +200,7 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
     if STATIC_CONFIG.versal_lib:
         if STATIC_CONFIG.versal_lib.output_ready():
             err: int = STATIC_CONFIG.versal_lib.receive_result(
-                complex_result.ctypes,
+                ctypes.byref(data),
                 ctypes.byref(idx),
                 ctypes.byref(step),
                 ctypes.byref(frame_nr),
@@ -214,11 +215,12 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
             # logger.warning("No occupied output buffer available")
             raise OutputEmpty()
     timer.log_time()
-    return (
-        (idx.value, step.value, frame_nr.value, complex_result)
-        if err == 0
-        else (0, step.value, frame_nr.value, np.zeros((1024, 512)).astype(np.int16))
-    )
+    if err == 0:
+        return (idx.value, step.value, frame_nr.value, data)
+    else:
+        zero = DataBlob()
+        _ = ctypes.memset(ctypes.addressof(zero), 0, ctypes.sizeof(zero))
+        return (0, step.value, frame_nr.value, zero)
 
 
 def make_update() -> Callable[[Timer], None]:
@@ -234,11 +236,11 @@ def make_update() -> Callable[[Timer], None]:
     return update_status
 
 
-def make_enqueue() -> Callable[[int, int, NDArray[np.int16]], None]:
+def make_enqueue() -> Callable[[int, int, DataBlob], None]:
     previous_step = -1
     commit = True
 
-    def enqueue(radar_idx: int, step: int, data: NDArray[np.int16]) -> None:
+    def enqueue(radar_idx: int, step: int, data: DataBlob) -> None:
         nonlocal commit
         nonlocal previous_step
         # pre condition
@@ -299,10 +301,7 @@ def receiver() -> None:
         while not received:
             if log_timer.snapshot() > 2:
                 log_timer.start()
-                eib(LogLevel.ERROR)
-                eob(LogLevel.ERROR)
-                oib(LogLevel.ERROR)
-                oob(LogLevel.ERROR)
+                buffer_status(LogLevel.ERROR)
             try:
                 _, _, _, _ = receive_radar_result()
                 received = True
@@ -356,15 +355,8 @@ def stopped_stream() -> None:
         time.sleep(0.04)
 
 
-def shape_ok(result: NDArray[np.int16]) -> bool:
-    if result.shape != (1024, 512):
-        logger.error(f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {result.shape}")
-        return False
-    return True
-
-
-def enqueue_result(idx: int, result: NDArray[np.int16]) -> None:
-    if not result_queues[idx].full() and shape_ok(result):
+def enqueue_range_doppler_result(idx: int, result: NDArray[np.int16]) -> None:
+    if not result_queues[idx].full():
         frame: memoryview[int] = Functor(result).bind(norm_image).bind(heat_map).bind(cfar).bind(create_frame).value
         result_queues[idx].put(frame)
 
@@ -373,8 +365,10 @@ def hw_stream():
     while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
         for idx in get_result_range():
             try:
-                result: NDArray[np.int16] = receive_queues[idx].get(timeout=0.06)
-                enqueue_result(idx, result)
+                result: DataBlob = receive_queues[idx].get(timeout=0.06)
+                range_doppler = result.range_doppler_data
+                range_doppler_np = np.ctypeslib.as_array(range_doppler)
+                enqueue_range_doppler_result(idx, range_doppler_np.reshape((1024, 512)))
             except queue.Empty:
                 continue
 
