@@ -2,13 +2,17 @@
 import json
 import time
 from enum import Enum
+from pathlib import Path
 
 import numpy as np
 
 from app.logic.config import STATIC_CONFIG
+from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
 from app.logic.settings import ComputePlatform, Settings, benchmark_settings, radar_settings
 from position import compute_position
+
+logger = get_logger(__name__, LogLevel.WARNING)
 
 
 class RunningState(Enum):
@@ -53,6 +57,8 @@ class GlobalState:
             "model": cls.model.value,
             "current_steps": cls.current_steps,
             "current_positions": cls.current_positions,
+            "path": cls.get_current_path(),
+            "path_scale": cls.get_path_scale(),
         }
 
     @classmethod
@@ -78,6 +84,30 @@ class GlobalState:
     @classmethod
     def get_current_steps(cls) -> list[int]:
         return GlobalState.current_steps
+
+    @classmethod
+    def get_current_path(cls) -> list[dict[str, float]]:
+        fps = STATIC_CONFIG.frame_rate_per_second
+        looptime = STATIC_CONFIG.period_in_seconds[0]
+        if cls.model == Model.IMAGING:
+            rx = 16
+            tx = 4
+        else:
+            rx = 4
+            tx = 1
+
+        path = Path(f"stimuli/radardemo_path_{tx}tx{rx}rx1024rg512dp{fps}fps{looptime}s.json")
+        if path.is_file():
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        logger.warning(f"Path file {path} not found.")
+        return []
+
+    @classmethod
+    def get_path_scale(cls) -> tuple[float, float, float]:
+        if cls.model == Model.IMAGING:
+            return (0.3, 0.3, 0.3)
+        return (2.0, 2.0, 2.0)
 
     @classmethod
     def set_steps(cls, steps: list[int]):
