@@ -171,7 +171,6 @@ class GlobalState:
             cls.settings.disable_hw()
 
         cls.running_state = RunningState.STOPPED
-        cls.page_state: PageState = PageState.LEFT
         cls.current_steps = [0, 0, 0, 0]
 
         cls.current_positions: tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]] = (
