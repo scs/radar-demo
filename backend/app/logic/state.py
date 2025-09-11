@@ -10,7 +10,7 @@ import numpy as np
 from app.logic.config import STATIC_CONFIG
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
-from app.logic.radar_simulation import target_queues
+from app.logic.queues import target_queues
 from app.logic.settings import ComputePlatform, Settings, benchmark_settings, radar_settings
 from position import compute_position
 

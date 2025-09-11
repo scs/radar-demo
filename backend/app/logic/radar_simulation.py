@@ -10,7 +10,7 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Callable, Generic, TypeVar, final
+from typing import Any, Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -19,60 +19,18 @@ from app.logic.buffer_status import buffer_status
 from app.logic.cfar import cfar, sw_cfar
 from app.logic.config import STATIC_CONFIG
 from app.logic.ctypes_data_blob import AoAEntry, DataBlob, DopplerRangeEntry
+from app.logic.functor import Functor
 from app.logic.image_utils import create_frame, heat_map, norm_image
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
 from app.logic.output_exception import InputFull, OutputEmpty
+from app.logic.queues import receive_queues, result_queues, target_queues
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
 
 logger = get_logger(__name__, LogLevel.WARNING)
-T = TypeVar("T")
-U = TypeVar("U")
 
-
-class Functor(Generic[T]):
-    def __init__(self, value: T) -> None:
-        self.value: T = value
-
-    def bind(self, func: Callable[[T], U]) -> Functor[U]:
-        return Functor(func(self.value))
-
-
-@final
-class QueueList(Generic[T]):
-    def __init__(self, num_queues: int, maxsize: int = 0):
-        self.queues = [queue.Queue(maxsize) for _ in range(num_queues)]
-
-    def flush(self):
-        for q in self.queues:
-            while not q.empty():
-                _ = q.get()
-
-    def anyfull(self) -> bool:
-        for q in self.queues:
-            if q.full():
-                return True
-        return False
-
-    def anyempty(self) -> bool:
-        for q in self.queues:
-            if q.empty():
-                return True
-        return False
-
-    def __getitem__(self, idx: int) -> queue.Queue[T]:
-        return self.queues[idx]
-
-    def __iter__(self) -> Generator[queue.Queue[T], None, None]:
-        for q in self.queues:
-            yield q
-
-
-result_queues = QueueList(num_queues=4, maxsize=2)
-receive_queues = QueueList(num_queues=4, maxsize=2)
-target_queues = QueueList(num_queues=4, maxsize=2)
 
 producer_run = threading.Event()
 receiver_run = threading.Event()
