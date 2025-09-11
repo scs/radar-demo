@@ -142,18 +142,19 @@ class GlobalState:
     def to_dict(cls):
 
         if cls.model not in [Model.NONE]:
-            current_positions: list[dict[str, dict[str, float] | int | float]] = cls.positions.get(cls.model, {})[
+            current_model_positions: list[dict[str, dict[str, float] | int | float]] = cls.positions.get(cls.model, {})[
                 cls.current_steps[3]
             ]
         else:
-            current_positions = [{}]
+            current_model_positions = [{}]
 
         return {
             "settings": cls.settings.to_dict(),
             "runningState": cls.running_state.value,
             "model": cls.model.value,
             "current_steps": cls.current_steps,
-            "current_positions": current_positions,
+            "current_positions": cls.current_positions,
+            "current_model_position": current_model_positions,
             "path": cls.get_current_path(),
             "path_scale": cls.get_path_scale(),
         }
