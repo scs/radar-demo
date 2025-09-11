@@ -10,6 +10,7 @@ import numpy as np
 from app.logic.config import STATIC_CONFIG
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
+from app.logic.radar_simulation import target_queues
 from app.logic.settings import ComputePlatform, Settings, benchmark_settings, radar_settings
 from position import compute_position
 
@@ -328,10 +329,27 @@ class GlobalState:
                 if frame_number[0] == 0:
                     cls.set_stopped()
 
+            if cls.model not in [Model.NONE]:
+                current_positions: list[dict[str, dict[str, float] | int | float]] = cls.positions.get(cls.model, {})[
+                    cls.current_steps[3]
+                ]
+            else:
+                current_positions = [{}]
+
+            if cls.model == Model.IMAGING:
+                try:
+                    target_positions = target_queues[0].get_nowait()
+                except Exception:
+                    target_positions = [{}]
+            else:
+                target_positions = [{}]
+
             data = {
                 "frameNumber": frame_number,
                 "periodCompletion": completion.tolist(),
                 "positions": cls.get_current_positions(),
+                "model_position": current_positions,
+                "target_positions": target_positions,
                 "runningState": cls.get_current_running_state().value,
             }
             yield f"data: {json.dumps(data)}\n\n"
