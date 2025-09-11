@@ -1,7 +1,3 @@
-# pyright: reportUnknownVariableType=false
-# pyright: reportUnknownMemberType=false
-# pyright: reportUnknownArgumentType=false
-# pyright: reportAny=false
 from __future__ import annotations
 
 import ctypes
@@ -114,7 +110,9 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
 
             err = 500
             for _ in range(3):  # Try max three times to send the same data
-                err = STATIC_CONFIG.versal_lib.send_scene(idx, frame_nr, step[idx], num_channels, 0)
+                err = STATIC_CONFIG.versal_lib.send_scene(  # pyright: ignore [reportAny]
+                    idx, frame_nr, step[idx], num_channels, 0
+                )
                 if err == 0:
                     send_count.release()
                     break
@@ -159,7 +157,7 @@ def receive_radar_result() -> tuple[int, int, int, DataBlob]:
     frame_nr = ctypes.c_uint32(0)
     if STATIC_CONFIG.versal_lib:
         if STATIC_CONFIG.versal_lib.output_ready():
-            err: int = STATIC_CONFIG.versal_lib.receive_result(
+            err: int = STATIC_CONFIG.versal_lib.receive_result(  # pyright: ignore [reportAny]
                 ctypes.byref(data),
                 ctypes.byref(idx),
                 ctypes.byref(step),
@@ -280,10 +278,16 @@ def receiver() -> None:
 
 def synthetic_result(current_step: int, channel: int) -> NDArray[np.uint8]:
     timer: Timer = Timer(name="synthetic_result")
-    phase: NDArray[np.float32] = 2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
+    phase: NDArray[np.float32] = (  # pyright: ignore [reportAny]
+        2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
+    )
     ypos: int = int((np.cos(phase + np.pi) * 0.9 + 1) / 2 * 1023)
     xpos: int = 511 + int(
-        (np.sin(phase)) * 480 / (STATIC_CONFIG.period_in_seconds[channel] / (STATIC_CONFIG.period_in_seconds[0] - 0.5))
+        (np.sin(phase))
+        * 480
+        / (
+            STATIC_CONFIG.period_in_seconds[channel] / (STATIC_CONFIG.period_in_seconds[0] - 0.5)
+        )  # pyright: ignore [reportAny]
     )
 
     Y, X = np.ogrid[: STATIC_CONFIG.video_dim, : STATIC_CONFIG.video_dim]
@@ -350,9 +354,13 @@ def hw_stream():
                 for c in cfar_results:
                     logger.debug(f"CFAR: Doppler {c.doppler}, Range {c.range}")
                 range_doppler = result.range_doppler_data
-                range_doppler_np = np.ctypeslib.as_array(range_doppler)
-                enqueue_range_doppler_result(idx, range_doppler_np.reshape((1024, 512)), cfar_results)
-                enqueue_targets(idx, targets)
+                range_doppler_np = np.ctypeslib.as_array(range_doppler)  # pyright: ignore [reportUnknownArgumentType]
+                enqueue_range_doppler_result(
+                    idx,
+                    range_doppler_np.reshape((1024, 512)),  # pyright: ignore [reportUnknownArgumentType]
+                    cfar_results,  # pyright: ignore [reportUnknownArgumentType]
+                )
+                enqueue_targets(idx, targets)  # pyright: ignore [reportUnknownArgumentType]
             except queue.Empty:
                 continue
 
