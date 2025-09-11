@@ -174,9 +174,11 @@ class GlobalState:
         cls.page_state: PageState = PageState.LEFT
         cls.current_steps = [0, 0, 0, 0]
 
-        cls.current_positions = np.vectorize(compute_position, signature="(),(n),(n)->()")(
-            [0, 0, 0, 0], cls.amplitudes, cls.offsets
-        ).tolist()
+        cls.current_positions: tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]] = (
+            np.vectorize(compute_position, signature="(),(n),(n)->()")(
+                [0, 0, 0, 0], cls.amplitudes, cls.offsets
+            ).tolist()
+        )
 
     @classmethod
     def get_current_steps(cls) -> list[int]:
