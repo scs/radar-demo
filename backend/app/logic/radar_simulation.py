@@ -371,9 +371,9 @@ def hw_stream():
             try:
                 result: DataBlob = receive_queues[idx].get(timeout=0.06)
                 num_cfar_results = result.cfar_header.length
-                cfar_results = np.ctypeslib.as_array(result.cfar_results)[:num_cfar_results]
+                cfar_results = result.cfar_results[:num_cfar_results]
                 num_targets = result.aoa_header.length
-                targets = np.ctypeslib.as_array(result.aoa_payload)[:num_targets]
+                targets = result.aoa_payload[:num_targets]
                 logger.debug(f"Found {num_cfar_results} CFAR results and {num_targets} targets")
                 logger.debug(f"Aoa Header: Minus1 {result.aoa_header.minus1}, Length {result.aoa_header.length}")
                 for t in targets:
