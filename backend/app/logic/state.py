@@ -1,6 +1,7 @@
 # pyright: reportAny=false
 import json
 import time
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -27,12 +28,85 @@ class PageState(Enum):
     ENTERED = "ENTERED"
 
 
-def compute_position_old(phase: float) -> dict[str, int]:
-    return {
-        "x": (np.cos(phase) * np.sin(phase)) / (np.sin(phase) ** 2 + 1) * 10,
-        "y": (np.cos(phase) / (np.sin(phase) ** 2 + 1)) * 10,
-        "z": 0,
-    }
+@dataclass
+class Quaternion:
+    w: float
+    x: float
+    y: float
+    z: float
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "w": self.w,
+            "x": self.x,
+            "y": self.y,
+            "z": self.z,
+        }
+
+
+@dataclass
+class Position:
+    x: float
+    y: float
+    z: float
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "x": self.x,
+            "y": self.y,
+            "z": self.z,
+        }
+
+
+@dataclass
+class ModelPosition:
+    step: int
+    position: Position
+    orientation: Quaternion
+    velocity: float
+
+    def to_dict(self) -> dict[str, dict[str, float] | int | float]:
+        return {
+            "step": self.step,
+            "position": self.position.to_dict(),
+            "orientation": self.orientation.to_dict(),
+            "velocity": self.velocity,
+        }
+
+
+class ModelPositionCollection:
+    def __init__(self, scene_file: Path) -> None:
+        if scene_file.is_file():
+            data = {}
+            with open(scene_file) as stats:
+                data = json.load(stats)
+
+            self.collection: list[ModelPosition] = [
+                ModelPosition(
+                    entry["step"],
+                    Position(entry["target_x"], entry["target_y"], entry["target_z"]),
+                    Quaternion(
+                        entry["target_quaternion_w"],
+                        entry["target_quaternion_x"],
+                        entry["target_quaternion_y"],
+                        entry["target_quaternion_z"],
+                    ),
+                    entry["projected_velocity"],
+                )
+                for entry in data
+            ]
+
+    def __getitem__(self, step: int) -> dict[str, dict[str, float] | int | float]:
+        step = step % len(self.collection)
+        return self.collection[step].to_dict()
+
+
+class ModelPositionCollectionCollection:
+    def __init__(self, scene_files: list[Path]) -> None:
+        self.collections: list[ModelPositionCollection] = [ModelPositionCollection(file) for file in scene_files]
+
+    def __getitem__(self, step: int) -> list[dict[str, dict[str, float] | int | float]]:
+        return [collection[step] for collection in self.collections]
 
 
 class GlobalState:
@@ -40,23 +114,43 @@ class GlobalState:
     running_state: RunningState = RunningState.STOPPED
     model: Model = Model("NONE")
     current_steps: list[int] = [0, 0, 0, 0]
-    current_positions: tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]] = (
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-    )
+
+    positions: dict[Model, ModelPositionCollectionCollection] = {
+        Model.ONE_D_FFT: ModelPositionCollectionCollection(
+            [Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps3s.json")]
+        ),
+        Model.SHORT_RANGE: ModelPositionCollectionCollection(
+            [Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps3s.json")]
+        ),
+        Model.QUAD_CORNER: ModelPositionCollectionCollection(
+            [
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps3s.json"),
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps4s.json"),
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps6s.json"),
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps12s.json"),
+            ]
+        ),
+        Model.IMAGING: ModelPositionCollectionCollection(
+            [Path("stimuli/radardemo_scene_4tx16rx1024rg512dp30fps3s.json")]
+        ),
+    }
     amplitudes: list[tuple[int, int, int]] = [(5, 10, 0)] * 4
     offsets: list[tuple[int, int, int]] = [(0, 0, 0)] * 4
 
     @classmethod
     def to_dict(cls):
+
+        if cls.model not in [Model.NONE]:
+            current_positions = cls.positions.get(cls.model, {})[cls.current_steps[3]]
+        else:
+            current_positions = {}
+
         return {
             "settings": cls.settings.to_dict(),
             "runningState": cls.running_state.value,
             "model": cls.model.value,
             "current_steps": cls.current_steps,
-            "current_positions": cls.current_positions,
+            "current_positions": current_positions,
             "path": cls.get_current_path(),
             "path_scale": cls.get_path_scale(),
         }
