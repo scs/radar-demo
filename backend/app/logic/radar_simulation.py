@@ -72,7 +72,6 @@ class QueueList(Generic[T]):
 
 result_queues = QueueList(num_queues=4, maxsize=2)
 receive_queues = QueueList(num_queues=4, maxsize=2)
-cfar_queues = QueueList(num_queues=4, maxsize=2)
 target_queues = QueueList(num_queues=4, maxsize=2)
 
 producer_run = threading.Event()
