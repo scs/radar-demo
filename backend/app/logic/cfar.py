@@ -1,6 +1,9 @@
+from typing import Callable
+
 import numpy as np
 from numpy.typing import NDArray
 
+from app.logic.ctypes_data_blob import DopplerRangeEntry
 from app.logic.model import Model
 from app.logic.state import GlobalState
 
@@ -74,21 +77,45 @@ def _draw_box(
         rgb_image[bottom:top, left, rgb] = color[rgb]
 
 
-def cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
+def get_cfar_format() -> tuple[int, int, int]:
+    stretch: int = 1 if GlobalState.use_hw() else 2
+    if GlobalState.model == Model.QUAD_CORNER:
+        width = 5 * stretch
+        height = 10
+        weight = 1
+    else:
+        width = 3 * stretch
+        height = 6
+        weight = 2
+    return width, height, weight
+
+
+def sw_cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
     if GlobalState.cfar_enabled():
         coord = np.argmax(rgb_image[..., 0])
         shape_coord: tuple[np.intp, ...] = np.unravel_index(coord, rgb_image[..., 0].shape)
         red: tuple[np.uint8, np.uint8, np.uint8] = (np.uint8(255), np.uint8(0), np.uint8(0))
-        stretch: int = 1 if GlobalState.use_hw() else 2
-        if GlobalState.model == Model.QUAD_CORNER:
-            width = 5 * stretch
-            height = 10
-            weight = 1
-        else:
-            width = 3 * stretch
-            height = 6
-            weight = 2
+        width, height, weight = get_cfar_format()
         shape = rgb_image[..., 0].shape
         draw_box(rgb_image, red, shape_coord, height, width, weight, shape)
         draw_cross(rgb_image, red, shape_coord, 3 * height, 3 * width, height, width, weight, shape)
     return rgb_image
+
+
+def cfar(cfar_results: list[DopplerRangeEntry]) -> Callable[..., NDArray[np.uint8]]:
+
+    def _cfar(rgb_image: NDArray[np.uint8]) -> NDArray[np.uint8]:
+        if GlobalState.cfar_enabled():
+            red: tuple[np.uint8, np.uint8, np.uint8] = (np.uint8(255), np.uint8(0), np.uint8(0))
+            shape = rgb_image[..., 0].shape
+            width, height, weight = get_cfar_format()
+
+            coords = [(result.range, result.doppler) for result in cfar_results]  # pyright: ignore [reportAny]
+
+            for coord in coords:
+                draw_box(rgb_image, red, coord, height, width, weight, shape)
+                draw_cross(rgb_image, red, coord, 3 * height, 3 * width, height, width, weight, shape)
+
+        return rgb_image
+
+    return _cfar

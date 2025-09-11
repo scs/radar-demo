@@ -16,8 +16,8 @@ class Header(ctypes.Structure):
 @final
 class DopplerRangeEntry(ctypes.Structure):
     _fields_ = [
-        ("doppler", ctypes.c_int16),
         ("range", ctypes.c_int16),
+        ("doppler", ctypes.c_int16),
     ]
 
 
