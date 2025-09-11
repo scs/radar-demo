@@ -335,7 +335,18 @@ def enqueue_range_doppler_result(idx: int, result: NDArray[np.int16], cfar_resul
 
 def enqueue_targets(idx: int, targets: list[AoAEntry]) -> None:
     if not target_queues[idx].full():
-        target_queues[idx].put(targets)
+
+        target_queues[idx].put(
+            [
+                {
+                    "x": t.x,  # pyright: ignore [reportAny]
+                    "y": t.y,  # pyright: ignore [reportAny]
+                    "z": t.z,  # pyright: ignore [reportAny]
+                    "velocity": t.velocity,  # pyright: ignore [reportAny]
+                }
+                for t in targets
+            ]
+        )
 
 
 def hw_stream():
