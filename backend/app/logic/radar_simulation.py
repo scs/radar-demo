@@ -366,6 +366,15 @@ def hw_stream():
         for idx in get_result_range():
             try:
                 result: DataBlob = receive_queues[idx].get(timeout=0.06)
+                num_cfar_results = result.cfar_header.length
+                cfar_results = np.ctypeslib.as_array(result.cfar_results)[:num_cfar_results]
+                num_targets = result.aoa_header.length
+                targets = np.ctypeslib.as_array(result.aoa_payload)[:num_targets]
+                logger.debug(f"Found {num_cfar_results} CFAR results and {num_targets} targets")
+                for t in targets:
+                    logger.debug(f"Target: X {t.x:.2f}, Y {t.y:.2f}, Z {t.z:.2f}, Velocity {t.velocity:.2f}")
+                for c in cfar_results:
+                    logger.debug(f"CFAR: Doppler {c.doppler}, Range {c.range}")
                 range_doppler = result.range_doppler_data
                 range_doppler_np = np.ctypeslib.as_array(range_doppler)
                 enqueue_range_doppler_result(idx, range_doppler_np.reshape((1024, 512)))
