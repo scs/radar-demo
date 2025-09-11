@@ -368,6 +368,11 @@ def enqueue_range_doppler_result(idx: int, result: NDArray[np.int16], cfar_resul
         result_queues[idx].put(frame)
 
 
+def enqueue_targets(idx: int, targets: list[AoAEntry]) -> None:
+    if not target_queues[idx].full():
+        target_queues[idx].put(targets)
+
+
 def hw_stream():
     while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
         for idx in get_result_range():
@@ -386,6 +391,7 @@ def hw_stream():
                 range_doppler = result.range_doppler_data
                 range_doppler_np = np.ctypeslib.as_array(range_doppler)
                 enqueue_range_doppler_result(idx, range_doppler_np.reshape((1024, 512)), cfar_results)
+                enqueue_targets(idx, targets)
             except queue.Empty:
                 continue
 
