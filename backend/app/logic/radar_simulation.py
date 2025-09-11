@@ -16,9 +16,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from app.logic.buffer_status import buffer_status
-from app.logic.cfar import cfar
+from app.logic.cfar import cfar, sw_cfar
 from app.logic.config import STATIC_CONFIG
-from app.logic.ctypes_data_blob import DataBlob
+from app.logic.ctypes_data_blob import AoAEntry, DataBlob, DopplerRangeEntry
 from app.logic.image_utils import create_frame, heat_map, norm_image
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
@@ -72,6 +72,8 @@ class QueueList(Generic[T]):
 
 result_queues = QueueList(num_queues=4, maxsize=2)
 receive_queues = QueueList(num_queues=4, maxsize=2)
+cfar_queues = QueueList(num_queues=4, maxsize=2)
+target_queues = QueueList(num_queues=4, maxsize=2)
 
 producer_run = threading.Event()
 receiver_run = threading.Event()
@@ -359,9 +361,11 @@ def stopped_stream() -> None:
         time.sleep(0.04)
 
 
-def enqueue_range_doppler_result(idx: int, result: NDArray[np.int16]) -> None:
+def enqueue_range_doppler_result(idx: int, result: NDArray[np.int16], cfar_results: list[DopplerRangeEntry]) -> None:
     if not result_queues[idx].full():
-        frame: memoryview[int] = Functor(result).bind(norm_image).bind(heat_map).bind(cfar).bind(create_frame).value
+        frame: memoryview[int] = (
+            Functor(result).bind(norm_image).bind(heat_map).bind(cfar(cfar_results)).bind(create_frame).value
+        )
         result_queues[idx].put(frame)
 
 
@@ -370,10 +374,10 @@ def hw_stream():
         for idx in get_result_range():
             try:
                 result: DataBlob = receive_queues[idx].get(timeout=0.06)
-                num_cfar_results = result.cfar_header.length
-                cfar_results = result.cfar_results[:num_cfar_results]
-                num_targets = result.aoa_header.length
-                targets = result.aoa_payload[:num_targets]
+                num_cfar_results: int = result.cfar_header.length
+                cfar_results: list[DopplerRangeEntry] = result.cfar_payload[:num_cfar_results]
+                num_targets: int = result.aoa_header.length
+                targets: list[AoAEntry] = result.aoa_payload[:num_targets]
                 logger.debug(f"Found {num_cfar_results} CFAR results and {num_targets} targets")
                 logger.debug(f"Aoa Header: Minus1 {result.aoa_header.minus1}, Length {result.aoa_header.length}")
                 for t in targets:
@@ -382,7 +386,7 @@ def hw_stream():
                     logger.debug(f"CFAR: Doppler {c.doppler}, Range {c.range}")
                 range_doppler = result.range_doppler_data
                 range_doppler_np = np.ctypeslib.as_array(range_doppler)
-                enqueue_range_doppler_result(idx, range_doppler_np.reshape((1024, 512)))
+                enqueue_range_doppler_result(idx, range_doppler_np.reshape((1024, 512)), cfar_results)
             except queue.Empty:
                 continue
 
@@ -394,7 +398,7 @@ def sw_stream():
                 frame = (
                     Functor(synthetic_result(GlobalState.get_current_steps()[idx], idx))
                     .bind(heat_map)
-                    .bind(cfar)
+                    .bind(sw_cfar)
                     .bind(create_frame)
                     .value
                 )
