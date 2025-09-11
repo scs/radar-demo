@@ -204,7 +204,11 @@ def receive_radar_result() -> tuple[int, int, int, DataBlob]:
                 ctypes.byref(idx),
                 ctypes.byref(step),
                 ctypes.byref(frame_nr),
-                1024 * 512 * ctypes.sizeof(ctypes.c_int16),
+                # fetch 3 MByte of data
+                # First MB is doppler range data (1024*512*2 bytes)
+                # Second MB is CFAR results
+                # Third MB is AOA results
+                3 * 1024 * 512 * ctypes.sizeof(ctypes.c_int16),
                 0,
             )
             if err:
@@ -371,6 +375,7 @@ def hw_stream():
                 num_targets = result.aoa_header.length
                 targets = np.ctypeslib.as_array(result.aoa_payload)[:num_targets]
                 logger.debug(f"Found {num_cfar_results} CFAR results and {num_targets} targets")
+                logger.debug(f"Aoa Header: Minus1 {result.aoa_header.minus1}, Length {result.aoa_header.length}")
                 for t in targets:
                     logger.debug(f"Target: X {t.x:.2f}, Y {t.y:.2f}, Z {t.z:.2f}, Velocity {t.velocity:.2f}")
                 for c in cfar_results:
