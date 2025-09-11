@@ -340,6 +340,9 @@ class GlobalState:
             if cls.model == Model.IMAGING:
                 try:
                     target_positions = target_queues[0].get_nowait()
+                    for t in target_positions:
+                        for key, value in t.items():
+                            logger.debug(f"TARGET {key}: {value}")
                 except Exception:
                     target_positions = [{}]
             else:
