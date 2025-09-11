@@ -94,6 +94,7 @@ gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), thr
 def flush_queues() -> None:
     receive_queues.flush()
     result_queues.flush()
+    target_queues.flush()
     # _ = flush_card(400)
 
 
@@ -349,10 +350,12 @@ def get_result_range() -> range:
 def stopped_stream() -> None:
     result_queues.flush()
     receive_queues.flush()
+    target_queues.flush()
     range_doppler_info.reset()
     while converter_run.is_set() and GlobalState.is_stopped():
         range_doppler_info.reset_frame_rate
         receive_queues.flush()
+        target_queues.flush()
         stop_buf: memoryview[int] = STATIC_CONFIG.stopped_buf
         if not result_queues.anyfull():
             for result_idx in get_result_range():
@@ -417,6 +420,7 @@ def converter():
         sw_stream()
     receive_queues.flush()
     result_queues.flush()
+    target_queues.flush()
     logger.info("Converter Stopped")
 
 
