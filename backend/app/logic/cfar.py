@@ -110,7 +110,9 @@ def cfar(cfar_results: list[DopplerRangeEntry]) -> Callable[..., NDArray[np.uint
             shape = rgb_image[..., 0].shape
             width, height, weight = get_cfar_format()
 
-            coords = [(result.range, result.doppler) for result in cfar_results]  # pyright: ignore [reportAny]
+            coords = [
+                (shape[0] - result.range, result.doppler) for result in cfar_results  # pyright: ignore [reportAny]
+            ]
 
             for coord in coords:
                 draw_box(rgb_image, red, coord, height, width, weight, shape)
