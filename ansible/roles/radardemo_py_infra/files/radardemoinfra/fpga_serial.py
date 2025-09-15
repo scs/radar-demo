@@ -5,6 +5,15 @@ import time
 import serial
 
 
+def extract_ip_v6(response: str) -> str:
+    pattern = re.compile(r"inet6 ([a-fA-F0-9:]+)")
+    for line in response.splitlines():
+        match = pattern.search(line.strip())
+        if match:
+            return match.group(1)
+    return ""
+
+
 class FpgaSerial:
 
     def __init__(self):
@@ -34,15 +43,15 @@ class FpgaSerial:
         self.serial.write(b"exit\n")
         self.flush_read()
 
-    def read_ip_v6(self) -> str | None:
-        self.serial.write(b"ip -6 addr show eth0\n")
+    def read_ip_v6(self) -> str:
+        self.serial.write(b"ip -6 addr show scope link\n")
         # Wait for the command to execute and response to be returned
         time.sleep(0.1)
         # Read the response
         response = self.serial.read_all()
         if response:
-            ipv6 = response.decode("utf-8").splitlines()[2].split()[1].split("/")[0]
-            return ipv6
+            return extract_ip_v6(response.decode("utf-8"))
+        return ""
 
     def get_ipv6(self) -> str | None:
         self.login()
@@ -68,3 +77,8 @@ class FpgaSerial:
 
     def close(self):
         self.serial.close()
+
+
+if __name__ == "__main__":
+    ipv6 = extract_ip_v6("inet6 fe80::a2a6:4eff:fe00:9c8/64 scope link\n")
+    print(f"Extracted IPv6: {ipv6}")
