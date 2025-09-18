@@ -206,7 +206,7 @@ class GlobalState:
     def get_path_scale(cls) -> tuple[float, float, float]:
         if cls.model == Model.IMAGING:
             return (0.3, 0.3, 0.3)
-        return (2.0, 2.0, 2.0)
+        return (3.0, 3.0, 0.0)
 
     @classmethod
     def set_steps(cls, steps: list[int]):
