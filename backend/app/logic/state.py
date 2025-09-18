@@ -341,13 +341,23 @@ class GlobalState:
             if cls.model == Model.IMAGING:
                 try:
                     target_positions = target_queues[0].get_nowait()
-                    for t in target_positions:
-                        for key, value in t.items():
-                            logger.debug(f"TARGET {key}: {value}")
                 except Exception:
                     target_positions = [{}]
+                    if not STATIC_CONFIG.versal_lib:
+                        target_positions = [
+                            {
+                                "x": current_positions[0]["position"]["x"],  # pyright: ignore [reportIndexIssue]
+                                "y": current_positions[0]["position"]["y"],  # pyright: ignore [reportIndexIssue]
+                                "z": current_positions[0]["position"]["z"] + 1,  # pyright: ignore [reportIndexIssue]
+                                "velocity": current_positions[0]["velocity"],
+                            }
+                        ]
             else:
                 target_positions = [{}]
+
+            for t in target_positions:
+                for key, value in t.items():
+                    logger.debug(f"TARGET {key}: {value}")
 
             data = {
                 "frameNumber": frame_number,
