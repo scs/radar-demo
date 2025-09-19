@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -115,6 +116,7 @@ class GlobalState:
     running_state: RunningState = RunningState.STOPPED
     model: Model = Model("NONE")
     current_steps: list[int] = [0, 0, 0, 0]
+    num_targets: int = 0
 
     positions: dict[Model, ModelPositionCollectionCollection] = {
         Model.ONE_D_FFT: ModelPositionCollectionCollection(
@@ -166,6 +168,7 @@ class GlobalState:
             model = "NONE"
         cls.model = Model(model)
         cls.settings = benchmark_settings if cls.model == Model.ONE_D_FFT else radar_settings
+        cls.num_targets = 0
         STATIC_CONFIG.probe_hw()
         if STATIC_CONFIG.versal_lib:
             cls.settings.set_device(ComputePlatform.VE2102)
@@ -346,6 +349,7 @@ class GlobalState:
             else:
                 current_positions = [{}]
 
+            target_positions = [{}]
             if cls.model == Model.IMAGING:
                 try:
                     target_positions = target_queues[0].get_nowait()
@@ -360,12 +364,12 @@ class GlobalState:
                                 "velocity": current_positions[0]["velocity"],
                             }
                         ]
-            else:
-                target_positions = [{}]
 
             for t in target_positions:
                 for key, value in t.items():
                     logger.debug(f"TARGET {key}: {value}")
+
+            GlobalState.num_targets = len(target_positions)  # pyright: ignore [reportUnknownArgumentType]
 
             data = {
                 "frameNumber": frame_number,
