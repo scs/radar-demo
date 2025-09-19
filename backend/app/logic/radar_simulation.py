@@ -339,8 +339,8 @@ def enqueue_targets(idx: int, targets: list[AoAEntry]) -> None:
         target_queues[idx].put(
             [
                 {
-                    "x": t.x,  # pyright: ignore [reportAny]
-                    "y": t.y,  # pyright: ignore [reportAny]
+                    "x": -1 * t.y,  # pyright: ignore [reportAny]
+                    "y": t.x,  # pyright: ignore [reportAny]
                     "z": t.z,  # pyright: ignore [reportAny]
                     "velocity": t.velocity,  # pyright: ignore [reportAny]
                 }
