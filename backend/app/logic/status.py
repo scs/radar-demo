@@ -109,7 +109,7 @@ class HwInfo(ABC):
 
     def format_load(self, load: float) -> str:
         retval_format = '"{' + f"load:.{int(max(1+math.log10(1/load), 0))}f" + '}%"'
-        retval: str = eval(f"f{retval_format}")
+        retval: str = eval(f"f{retval_format}")  # pyright: ignore [reportAny]
         return retval
 
 
