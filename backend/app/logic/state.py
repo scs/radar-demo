@@ -185,15 +185,16 @@ class GlobalState:
         return GlobalState.current_steps
 
     @classmethod
+    def get_rx_tx_setup(cls) -> tuple[int, int]:
+        if cls.model == Model.IMAGING:
+            return (16, 4)
+        return (4, 1)
+
+    @classmethod
     def get_current_path(cls) -> list[dict[str, float]]:
         fps = STATIC_CONFIG.frame_rate_per_second
         looptime = STATIC_CONFIG.period_in_seconds[0]
-        if cls.model == Model.IMAGING:
-            rx = 16
-            tx = 4
-        else:
-            rx = 4
-            tx = 1
+        rx, tx = cls.get_rx_tx_setup()
 
         path = Path(f"stimuli/radardemo_path_{tx}tx{rx}rx1024rg512dp{fps}fps{looptime}s.json")
         if path.is_file():
