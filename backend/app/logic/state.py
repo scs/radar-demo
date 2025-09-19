@@ -157,6 +157,7 @@ class GlobalState:
             "current_model_position": current_model_positions,
             "path": cls.get_current_path(),
             "path_scale": cls.get_path_scale(),
+            "model_scale": cls.get_model_scale(),
         }
 
     @classmethod
@@ -208,6 +209,12 @@ class GlobalState:
         if cls.model == Model.IMAGING:
             return (0.3, 0.3, 0.3)
         return (3.0, 3.0, 0.0)
+
+    @classmethod
+    def get_model_scale(cls) -> tuple[float, float, float]:
+        if cls.model == Model.IMAGING:
+            return (2.0, 2.0, 2.0)
+        return (1.0, 1.0, 1.0)
 
     @classmethod
     def set_steps(cls, steps: list[int]):
