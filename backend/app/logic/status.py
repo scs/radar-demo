@@ -94,7 +94,7 @@ class HwInfo(ABC):
         return 52
 
     def ps_usage(self) -> int:
-        return 3
+        return GlobalState.num_targets + 3
 
     def get_info(self, settings: Settings):
         data: list[dict[str, str | list[int] | int]] = [
