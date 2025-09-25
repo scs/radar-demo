@@ -39,12 +39,15 @@ class HwInfo(ABC):
     num_aie_used: int = 1
 
     def reset(self) -> None:
-        self.frame_rate = [0]
+        self.frame_rate = []
         self.power = 0
 
     @property
     def fps(self) -> int:
-        frame_rate = np.mean(self.frame_rate)
+        try:
+            frame_rate = np.mean(self.frame_rate)
+        except:
+            frame_rate = 0
         return int(frame_rate)
 
     @fps.setter
@@ -55,7 +58,7 @@ class HwInfo(ABC):
 
     @property
     def reset_frame_rate(self):
-        self.frame_rate = [0]
+        self.frame_rate = []
 
     @property
     def watt(self) -> str:
@@ -86,9 +89,7 @@ class HwInfo(ABC):
         else:
             return str(value)
 
-    def pl_usage(
-        self,
-    ) -> int:
+    def pl_usage(self) -> int:
         if GlobalState.cfar_enabled():
             return 53
         return 52

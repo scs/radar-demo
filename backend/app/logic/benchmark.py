@@ -349,7 +349,7 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
             frame = result_queue.get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
 
-            if loop_timer.snapshot() > 0.2:
+            if loop_timer.snapshot() > 0.05:
                 # calculate speed for hw
                 count_current = Count
                 benchmark_info.fps = int(1 / loop_timer.duration() * (count_current - count_bak))
