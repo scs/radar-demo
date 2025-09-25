@@ -44,8 +44,6 @@ class HwInfo(ABC):
 
     @property
     def fps(self) -> int:
-        if len(self.frame_rate) == 0:
-            return 0
         try:
             frame_rate = np.mean(self.frame_rate)
         except:
@@ -91,9 +89,7 @@ class HwInfo(ABC):
         else:
             return str(value)
 
-    def pl_usage(
-        self,
-    ) -> int:
+    def pl_usage(self) -> int:
         if GlobalState.cfar_enabled():
             return 53
         return 52
