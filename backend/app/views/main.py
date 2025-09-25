@@ -1,6 +1,8 @@
 import threading
+import time
 from typing import Any
 
+import psutil
 from flask import Response, jsonify, render_template, request
 
 from app import app
@@ -19,7 +21,7 @@ from app.logic.status import gen_radar_data
 # Module Global Variables
 #
 HW_LOCK: threading.Lock = threading.Lock()
-
+MINIMAL_UPTIME: int = 20  # seconds
 
 logger = get_logger(__name__, LogLevel.WARNING)
 
@@ -121,6 +123,10 @@ def leave_page():
 
 @app.route("/initApp", methods=["GET"])
 def init_app():
+    uptime = time.time() - psutil.boot_time()
+    if uptime < MINIMAL_UPTIME:
+        time.sleep(MINIMAL_UPTIME - uptime)
+
     GlobalState.init_state(None)
     return "", 200
 
