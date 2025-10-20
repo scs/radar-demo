@@ -93,10 +93,17 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
             time.sleep(0.001)
             continue
 
+def modified_steps() -> list[int]:
+    steps = [i+5 for i in GlobalState.get_current_steps()]
+    steps[0] = steps[0] % 90
+    steps[1] = steps[1] % 120
+    steps[2] = steps[2] % 180
+    steps[3] = steps[3] % 380
+    return steps
 
 def send_scene(timeout_ms: float, frame_nr: int) -> int:
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
-    step: list[int] = GlobalState.get_current_steps()
+    step: list[int] = modified_steps()
     timeout = Timer("send_timeout")
     for idx in get_result_range():
         timeout.start()  # each radar has the same timeout
