@@ -215,7 +215,7 @@ class GlobalState:
     @classmethod
     def get_model_scale(cls) -> tuple[float, float, float]:
         if cls.model == Model.IMAGING:
-            return (2.0, 2.0, 2.0)
+            return (3.0, 3.0, 3.0)
         return (1.0, 1.0, 1.0)
 
     @classmethod
