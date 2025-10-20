@@ -93,13 +93,15 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
             time.sleep(0.001)
             continue
 
+
 def modified_steps() -> list[int]:
-    steps = [i+5 for i in GlobalState.get_current_steps()]
+    steps = [i + 5 for i in GlobalState.get_current_steps()]
     steps[0] = steps[0] % 90
     steps[1] = steps[1] % 120
     steps[2] = steps[2] % 180
     steps[3] = steps[3] % 380
     return steps
+
 
 def send_scene(timeout_ms: float, frame_nr: int) -> int:
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
@@ -197,7 +199,7 @@ def make_update() -> Callable[[Timer], None]:
 
     def update_status(timer: Timer) -> None:
         nonlocal count
-        INTEGRATION_TIME = 1
+        INTEGRATION_TIME = 4
         if count % INTEGRATION_TIME == 0:
             range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration() / get_result_range().stop)
         count += 1
