@@ -226,7 +226,7 @@ def make_update() -> Callable[[Timer], None]:
 
     def update_status(timer: Timer) -> None:
         nonlocal count
-        INTEGRATION_TIME = 2 * 4
+        INTEGRATION_TIME = 4
         if count % INTEGRATION_TIME == 0:
             range_doppler_info.fps = int(INTEGRATION_TIME / timer.duration() / get_result_range().stop)
         count += 1
