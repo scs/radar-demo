@@ -44,11 +44,13 @@ class HwInfo(ABC):
 
     @property
     def fps(self) -> int:
+        if len(self.frame_rate) == 0:
+            return 0
         try:
-            frame_rate = np.mean(self.frame_rate)
+            _fps = np.mean(self.frame_rate)
         except:
-            frame_rate = 0
-        return int(frame_rate)
+            _fps = 0
+        return int(_fps)
 
     @fps.setter
     def fps(self, value: int):
@@ -151,9 +153,8 @@ class Fft1DInfo(HwInfo):
             load = -1
             if option in map_min_time:
                 min_time = map_min_time[option]
-                fps = np.mean(self.frame_rate)
                 batch_size = GlobalState.get_current_batch_size()
-                load = min_time * fps * batch_size * 100
+                load = min_time * self.fps * batch_size * 100
                 if GlobalState.parallel_10x_enabled():
                     for i in range(10):
                         retval[i] = min(int(load), 100)
@@ -166,8 +167,7 @@ class Fft1DInfo(HwInfo):
         if settings.get_device() == ComputePlatform.PC_EMULATION.value:
             return int(np.mean(self.ffts_emulation))
         batch_size = GlobalState.get_current_batch_size()
-        mean = np.mean(self.frame_rate)
-        return int(batch_size * mean)
+        return int(batch_size * self.fps)
 
     def fft_per_sec(self, settings: Settings) -> str:  # pyright: ignore [reportImplicitOverride]
         device = settings.get_device()
@@ -206,11 +206,12 @@ class RangeDopplerInfo(HwInfo):
         return load
 
     def generic_fft_per_sec_int(self, fft_size: int) -> int:
-        mean = np.mean(self.frame_rate)
+        if len(self.frame_rate) == 0:
+            return 0
         channels = 16
         if GlobalState.get_current_model() == Model.SHORT_RANGE:
             channels /= 4
-        return int(channels * fft_size * mean)
+        return int(channels * fft_size * self.fps)
 
     def range_fft_per_sec_int(self, settings: Settings) -> int:
         range_config = settings.get_selected_option(SettingLabel.DOPPLER_FFT) or 1
