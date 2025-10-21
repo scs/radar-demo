@@ -1,8 +1,6 @@
 import threading
-import time
 from typing import Any
 
-import psutil
 from flask import Response, jsonify, render_template, request
 
 from app import app
@@ -123,10 +121,6 @@ def leave_page():
 
 @app.route("/initApp", methods=["GET"])
 def init_app():
-    uptime = time.time() - psutil.boot_time()
-    if uptime < MINIMAL_UPTIME:
-        time.sleep(MINIMAL_UPTIME - uptime)
-
     GlobalState.init_state(None)
     return "", 200
 
