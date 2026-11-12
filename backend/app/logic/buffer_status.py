@@ -4,18 +4,6 @@ from app.logic.logging import LogLevel, get_logger
 logger = get_logger(__name__, LogLevel.ERROR)
 
 
-def flush_card(timeout_ms: int) -> bool:
-    if STATIC_CONFIG.versal_lib:
-        err: int = STATIC_CONFIG.versal_lib.flush(timeout_ms)
-        if err != 0:
-            eib(LogLevel.ERROR)
-            eob(LogLevel.ERROR)
-            oib(LogLevel.ERROR)
-            oob(LogLevel.ERROR)
-        return err == 0
-    return True
-
-
 def buffer_status(level: LogLevel) -> None:
     eib(level)
     eob(level)

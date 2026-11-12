@@ -1,14 +1,20 @@
 # pyright: reportAny=false
 import json
 import time
+from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 import numpy as np
 
 from app.logic.config import STATIC_CONFIG
+from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
+from app.logic.queues import target_queues
 from app.logic.settings import ComputePlatform, Settings, benchmark_settings, radar_settings
 from position import compute_position
+
+logger = get_logger(__name__, LogLevel.WARNING)
 
 
 class RunningState(Enum):
@@ -23,12 +29,85 @@ class PageState(Enum):
     ENTERED = "ENTERED"
 
 
-def compute_position_old(phase: float) -> dict[str, int]:
-    return {
-        "x": (np.cos(phase) * np.sin(phase)) / (np.sin(phase) ** 2 + 1) * 10,
-        "y": (np.cos(phase) / (np.sin(phase) ** 2 + 1)) * 10,
-        "z": 0,
-    }
+@dataclass
+class Quaternion:
+    w: float
+    x: float
+    y: float
+    z: float
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "w": self.w,
+            "x": self.x,
+            "y": self.y,
+            "z": self.z,
+        }
+
+
+@dataclass
+class Position:
+    x: float
+    y: float
+    z: float
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "x": self.x,
+            "y": self.y,
+            "z": self.z,
+        }
+
+
+@dataclass
+class ModelPosition:
+    step: int
+    position: Position
+    orientation: Quaternion
+    velocity: float
+
+    def to_dict(self) -> dict[str, dict[str, float] | int | float]:
+        return {
+            "step": self.step,
+            "position": self.position.to_dict(),
+            "orientation": self.orientation.to_dict(),
+            "velocity": self.velocity,
+        }
+
+
+class ModelPositionCollection:
+    def __init__(self, scene_file: Path) -> None:
+        if scene_file.is_file():
+            data = {}
+            with open(scene_file) as stats:
+                data = json.load(stats)
+
+            self.collection: list[ModelPosition] = [
+                ModelPosition(
+                    entry["step"],
+                    Position(entry["target_x"], entry["target_y"], entry["target_z"]),
+                    Quaternion(
+                        entry["target_quaternion_w"],
+                        entry["target_quaternion_x"],
+                        entry["target_quaternion_y"],
+                        entry["target_quaternion_z"],
+                    ),
+                    entry["projected_velocity"],
+                )
+                for entry in data
+            ]
+
+    def __getitem__(self, step: int) -> dict[str, dict[str, float] | int | float]:
+        step = step % len(self.collection)
+        return self.collection[step].to_dict()
+
+
+class ModelPositionCollectionCollection:
+    def __init__(self, scene_files: list[Path]) -> None:
+        self.collections: list[ModelPositionCollection] = [ModelPositionCollection(file) for file in scene_files]
+
+    def __getitem__(self, step: int) -> list[dict[str, dict[str, float] | int | float]]:
+        return [collection[step] for collection in self.collections]
 
 
 class GlobalState:
@@ -36,23 +115,50 @@ class GlobalState:
     running_state: RunningState = RunningState.STOPPED
     model: Model = Model("NONE")
     current_steps: list[int] = [0, 0, 0, 0]
-    current_positions: tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]] = (
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-        {"x": 0.0, "y": 0.0, "z": 0.0},
-    )
+    num_targets: int = 0
+
+    positions: dict[Model, ModelPositionCollectionCollection] = {
+        Model.ONE_D_FFT: ModelPositionCollectionCollection(
+            [Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps3s.json")]
+        ),
+        Model.SHORT_RANGE: ModelPositionCollectionCollection(
+            [Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps3s.json")]
+        ),
+        Model.QUAD_CORNER: ModelPositionCollectionCollection(
+            [
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps3s.json"),
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps4s.json"),
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps6s.json"),
+                Path("stimuli/radardemo_scene_1tx4rx1024rg512dp30fps12s.json"),
+            ]
+        ),
+        Model.IMAGING: ModelPositionCollectionCollection(
+            [Path("stimuli/radardemo_scene_4tx16rx1024rg512dp30fps3s.json")]
+        ),
+    }
     amplitudes: list[tuple[int, int, int]] = [(5, 10, 0)] * 4
     offsets: list[tuple[int, int, int]] = [(0, 0, 0)] * 4
 
     @classmethod
     def to_dict(cls):
+
+        if cls.model not in [Model.NONE]:
+            current_model_positions: list[dict[str, dict[str, float] | int | float]] = cls.positions.get(cls.model, {})[
+                cls.current_steps[3]
+            ]
+        else:
+            current_model_positions = [{}]
+
         return {
             "settings": cls.settings.to_dict(),
             "runningState": cls.running_state.value,
             "model": cls.model.value,
             "current_steps": cls.current_steps,
             "current_positions": cls.current_positions,
+            "current_model_position": current_model_positions,
+            "path": cls.get_current_path(),
+            "path_scale": cls.get_path_scale(),
+            "model_scale": cls.get_model_scale(),
         }
 
     @classmethod
@@ -61,6 +167,7 @@ class GlobalState:
             model = "NONE"
         cls.model = Model(model)
         cls.settings = benchmark_settings if cls.model == Model.ONE_D_FFT else radar_settings
+        cls.num_targets = 0
         STATIC_CONFIG.probe_hw()
         if STATIC_CONFIG.versal_lib:
             cls.settings.set_device(ComputePlatform.VE2102)
@@ -68,16 +175,48 @@ class GlobalState:
             cls.settings.disable_hw()
 
         cls.running_state = RunningState.STOPPED
-        cls.page_state: PageState = PageState.LEFT
         cls.current_steps = [0, 0, 0, 0]
 
-        cls.current_positions = np.vectorize(compute_position, signature="(),(n),(n)->()")(
-            [0, 0, 0, 0], cls.amplitudes, cls.offsets
-        ).tolist()
+        cls.current_positions: tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]] = (
+            np.vectorize(compute_position, signature="(),(n),(n)->()")(
+                [0, 0, 0, 0], cls.amplitudes, cls.offsets
+            ).tolist()
+        )
 
     @classmethod
     def get_current_steps(cls) -> list[int]:
         return GlobalState.current_steps
+
+    @classmethod
+    def get_rx_tx_setup(cls) -> tuple[int, int]:
+        if cls.model == Model.IMAGING:
+            return (16, 4)
+        return (4, 1)
+
+    @classmethod
+    def get_current_path(cls) -> list[dict[str, float]]:
+        fps = STATIC_CONFIG.frame_rate_per_second
+        looptime = STATIC_CONFIG.period_in_seconds[0]
+        rx, tx = cls.get_rx_tx_setup()
+
+        path = Path(f"stimuli/radardemo_path_{tx}tx{rx}rx1024rg512dp{fps}fps{looptime}s.json")
+        if path.is_file():
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        logger.warning(f"Path file {path} not found.")
+        return []
+
+    @classmethod
+    def get_path_scale(cls) -> tuple[float, float, float]:
+        if cls.model == Model.IMAGING:
+            return (0.3, 0.3, 0.3)
+        return (3.0, 3.0, 0.0)
+
+    @classmethod
+    def get_model_scale(cls) -> tuple[float, float, float]:
+        if cls.model == Model.IMAGING:
+            return (3.0, 3.0, 3.0)
+        return (1.0, 1.0, 1.0)
 
     @classmethod
     def set_steps(cls, steps: list[int]):
@@ -202,10 +341,41 @@ class GlobalState:
                 if frame_number[0] == 0:
                     cls.set_stopped()
 
+            if cls.model not in [Model.NONE]:
+                current_positions: list[dict[str, dict[str, float] | int | float]] = cls.positions.get(cls.model, {})[
+                    cls.current_steps[3]
+                ]
+            else:
+                current_positions = [{}]
+
+            target_positions = [{}]
+            if cls.model == Model.IMAGING:
+                try:
+                    target_positions = target_queues[0].get_nowait()
+                except Exception:
+                    target_positions = [{}]
+                    if not STATIC_CONFIG.versal_lib:
+                        target_positions = [
+                            {
+                                "x": current_positions[0]["position"]["x"],  # pyright: ignore [reportIndexIssue]
+                                "y": current_positions[0]["position"]["y"],  # pyright: ignore [reportIndexIssue]
+                                "z": current_positions[0]["position"]["z"] + 1,  # pyright: ignore [reportIndexIssue]
+                                "velocity": current_positions[0]["velocity"],
+                            }
+                        ]
+
+            for t in target_positions:
+                for key, value in t.items():
+                    logger.debug(f"TARGET {key}: {value}")
+
+            GlobalState.num_targets = len(target_positions)  # pyright: ignore [reportUnknownArgumentType]
+
             data = {
                 "frameNumber": frame_number,
                 "periodCompletion": completion.tolist(),
                 "positions": cls.get_current_positions(),
+                "model_position": current_positions,
+                "target_positions": target_positions,
                 "runningState": cls.get_current_running_state().value,
             }
             yield f"data: {json.dumps(data)}\n\n"

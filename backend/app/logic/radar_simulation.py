@@ -1,7 +1,3 @@
-# pyright: reportUnknownVariableType=false
-# pyright: reportUnknownMemberType=false
-# pyright: reportUnknownArgumentType=false
-# pyright: reportAny=false
 from __future__ import annotations
 
 import ctypes
@@ -10,67 +6,27 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Callable, Generic, TypeVar, final
+from typing import Any, Callable
 
 import numpy as np
 from numpy.typing import NDArray
 
-from app.logic.cfar import cfar
+from app.logic.buffer_status import buffer_status
+from app.logic.cfar import cfar, sw_cfar
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import buffer_status, eib, eob, oib, oob
+from app.logic.ctypes_data_blob import AoAEntry, DataBlob, DopplerRangeEntry
+from app.logic.functor import Functor
 from app.logic.image_utils import create_frame, heat_map, norm_image
 from app.logic.logging import LogLevel, get_logger
 from app.logic.model import Model
 from app.logic.output_exception import InputFull, OutputEmpty
+from app.logic.queues import receive_queues, result_queues, target_queues
 from app.logic.state import GlobalState
 from app.logic.status import range_doppler_info
 from app.logic.timer import Timer
 
 logger = get_logger(__name__, LogLevel.WARNING)
-T = TypeVar("T")
-U = TypeVar("U")
 
-
-class Functor(Generic[T]):
-    def __init__(self, value: T) -> None:
-        self.value: T = value
-
-    def bind(self, func: Callable[[T], U]) -> Functor[U]:
-        return Functor(func(self.value))
-
-
-@final
-class QueueList(Generic[T]):
-    def __init__(self, num_queues: int, maxsize: int = 0):
-        self.queues = [queue.Queue(maxsize) for _ in range(num_queues)]
-
-    def flush(self):
-        for q in self.queues:
-            while not q.empty():
-                _ = q.get()
-
-    def anyfull(self) -> bool:
-        for q in self.queues:
-            if q.full():
-                return True
-        return False
-
-    def anyempty(self) -> bool:
-        for q in self.queues:
-            if q.empty():
-                return True
-        return False
-
-    def __getitem__(self, idx: int) -> queue.Queue[T]:
-        return self.queues[idx]
-
-    def __iter__(self) -> Generator[queue.Queue[T], None, None]:
-        for q in self.queues:
-            yield q
-
-
-result_queues = QueueList(num_queues=4, maxsize=2)
-receive_queues = QueueList(num_queues=4, maxsize=2)
 
 producer_run = threading.Event()
 receiver_run = threading.Event()
@@ -92,6 +48,7 @@ gen_frames_state = [threading.Event(), threading.Event(), threading.Event(), thr
 def flush_queues() -> None:
     receive_queues.flush()
     result_queues.flush()
+    target_queues.flush()
     # _ = flush_card(400)
 
 
@@ -137,9 +94,18 @@ def gen_frames(idx: int) -> Generator[Any, Any, None]:  # pyright: ignore [repor
             continue
 
 
+def modified_steps() -> list[int]:
+    steps = [i + 5 for i in GlobalState.get_current_steps()]
+    steps[0] = steps[0] % 90
+    steps[1] = steps[1] % 120
+    steps[2] = steps[2] % 180
+    steps[3] = steps[3] % 380
+    return steps
+
+
 def send_scene(timeout_ms: float, frame_nr: int) -> int:
     num_channels = 16 if GlobalState.model == Model.IMAGING else 4
-    step: list[int] = GlobalState.get_current_steps()
+    step: list[int] = modified_steps()
     timeout = Timer("send_timeout")
     for idx in get_result_range():
         timeout.start()  # each radar has the same timeout
@@ -153,7 +119,9 @@ def send_scene(timeout_ms: float, frame_nr: int) -> int:
 
             err = 500
             for _ in range(3):  # Try max three times to send the same data
-                err = STATIC_CONFIG.versal_lib.send_scene(idx, frame_nr, step[idx], num_channels, 0)
+                err = STATIC_CONFIG.versal_lib.send_scene(  # pyright: ignore [reportAny]
+                    idx, frame_nr, step[idx], num_channels, 0
+                )
                 if err == 0:
                     send_count.release()
                     break
@@ -179,18 +147,18 @@ def sender():
             except InputFull:
                 continue
         else:
-            eib(LogLevel.INFO)
-            eob(LogLevel.INFO)
-            oib(LogLevel.INFO)
-            oob(LogLevel.INFO)
+            buffer_status(LogLevel.INFO)
             time.sleep(0.1)
 
     logger.info("Producer Stopped")
     receiver_run.clear()
 
 
-def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
-    complex_result = np.empty((1024, 512), np.int16)
+def receive_radar_result() -> tuple[int, int, int, DataBlob]:
+    data: DataBlob = DataBlob()
+    # Initialize all data in DataBlob to zero
+    _ = ctypes.memset(ctypes.addressof(data), 0, ctypes.sizeof(data))
+    # complex_result = np.empty((1024, 512), np.int16)
     timer = Timer(name="get_radar_result")
     err = 0
     idx = ctypes.c_uint32(0)
@@ -198,12 +166,16 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
     frame_nr = ctypes.c_uint32(0)
     if STATIC_CONFIG.versal_lib:
         if STATIC_CONFIG.versal_lib.output_ready():
-            err: int = STATIC_CONFIG.versal_lib.receive_result(
-                complex_result.ctypes,
+            err: int = STATIC_CONFIG.versal_lib.receive_result(  # pyright: ignore [reportAny]
+                ctypes.byref(data),
                 ctypes.byref(idx),
                 ctypes.byref(step),
                 ctypes.byref(frame_nr),
-                1024 * 512 * ctypes.sizeof(ctypes.c_int16),
+                # fetch 3 MByte of data
+                # First MB is doppler range data (1024*512*2 bytes)
+                # Second MB is CFAR results
+                # Third MB is AOA results
+                3 * 1024 * 512 * ctypes.sizeof(ctypes.c_int16),
                 0,
             )
             if err:
@@ -214,11 +186,12 @@ def receive_radar_result() -> tuple[int, int, int, NDArray[np.int16]]:
             # logger.warning("No occupied output buffer available")
             raise OutputEmpty()
     timer.log_time()
-    return (
-        (idx.value, step.value, frame_nr.value, complex_result)
-        if err == 0
-        else (0, step.value, frame_nr.value, np.zeros((1024, 512)).astype(np.int16))
-    )
+    if err == 0:
+        return (idx.value, step.value, frame_nr.value, data)
+    else:
+        zero = DataBlob()
+        _ = ctypes.memset(ctypes.addressof(zero), 0, ctypes.sizeof(zero))
+        return (0, step.value, frame_nr.value, zero)
 
 
 def make_update() -> Callable[[Timer], None]:
@@ -234,11 +207,11 @@ def make_update() -> Callable[[Timer], None]:
     return update_status
 
 
-def make_enqueue() -> Callable[[int, int, NDArray[np.int16]], None]:
+def make_enqueue() -> Callable[[int, int, DataBlob], None]:
     previous_step = -1
     commit = True
 
-    def enqueue(radar_idx: int, step: int, data: NDArray[np.int16]) -> None:
+    def enqueue(radar_idx: int, step: int, data: DataBlob) -> None:
         nonlocal commit
         nonlocal previous_step
         # pre condition
@@ -299,10 +272,7 @@ def receiver() -> None:
         while not received:
             if log_timer.snapshot() > 2:
                 log_timer.start()
-                eib(LogLevel.ERROR)
-                eob(LogLevel.ERROR)
-                oib(LogLevel.ERROR)
-                oob(LogLevel.ERROR)
+                buffer_status(LogLevel.ERROR)
             try:
                 _, _, _, _ = receive_radar_result()
                 received = True
@@ -317,10 +287,16 @@ def receiver() -> None:
 
 def synthetic_result(current_step: int, channel: int) -> NDArray[np.uint8]:
     timer: Timer = Timer(name="synthetic_result")
-    phase: NDArray[np.float32] = 2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
+    phase: NDArray[np.float32] = (  # pyright: ignore [reportAny]
+        2 * np.pi * current_step / STATIC_CONFIG.number_of_steps_in_period[channel]
+    )
     ypos: int = int((np.cos(phase + np.pi) * 0.9 + 1) / 2 * 1023)
     xpos: int = 511 + int(
-        (np.sin(phase)) * 480 / (STATIC_CONFIG.period_in_seconds[channel] / (STATIC_CONFIG.period_in_seconds[0] - 0.5))
+        (np.sin(phase))
+        * 480
+        / (
+            STATIC_CONFIG.period_in_seconds[channel] / (STATIC_CONFIG.period_in_seconds[0] - 0.5)
+        )  # pyright: ignore [reportAny]
     )
 
     Y, X = np.ogrid[: STATIC_CONFIG.video_dim, : STATIC_CONFIG.video_dim]
@@ -345,10 +321,12 @@ def get_result_range() -> range:
 def stopped_stream() -> None:
     result_queues.flush()
     receive_queues.flush()
+    target_queues.flush()
     range_doppler_info.reset()
     while converter_run.is_set() and GlobalState.is_stopped():
         range_doppler_info.reset_frame_rate
         receive_queues.flush()
+        target_queues.flush()
         stop_buf: memoryview[int] = STATIC_CONFIG.stopped_buf
         if not result_queues.anyfull():
             for result_idx in get_result_range():
@@ -356,25 +334,53 @@ def stopped_stream() -> None:
         time.sleep(0.04)
 
 
-def shape_ok(result: NDArray[np.int16]) -> bool:
-    if result.shape != (1024, 512):
-        logger.error(f"Result shape is not as expected:: Expected: (4, 1024, 512, 2) -> Actual: {result.shape}")
-        return False
-    return True
-
-
-def enqueue_result(idx: int, result: NDArray[np.int16]) -> None:
-    if not result_queues[idx].full() and shape_ok(result):
-        frame: memoryview[int] = Functor(result).bind(norm_image).bind(heat_map).bind(cfar).bind(create_frame).value
+def enqueue_range_doppler_result(idx: int, result: NDArray[np.int16], cfar_results: list[DopplerRangeEntry]) -> None:
+    if not result_queues[idx].full():
+        frame: memoryview[int] = (
+            Functor(result).bind(norm_image).bind(heat_map).bind(cfar(cfar_results)).bind(create_frame).value
+        )
         result_queues[idx].put(frame)
+
+
+def enqueue_targets(idx: int, targets: list[AoAEntry]) -> None:
+    if not target_queues[idx].full():
+
+        target_queues[idx].put(
+            [
+                {
+                    "x": -1 * t.y,  # pyright: ignore [reportAny]
+                    "y": t.x,  # pyright: ignore [reportAny]
+                    "z": t.z + 4,  # pyright: ignore [reportAny]
+                    "velocity": t.velocity,  # pyright: ignore [reportAny]
+                }
+                for t in targets
+            ]
+        )
 
 
 def hw_stream():
     while converter_run.is_set() and not GlobalState.is_stopped() and GlobalState.use_hw():
         for idx in get_result_range():
             try:
-                result: NDArray[np.int16] = receive_queues[idx].get(timeout=0.06)
-                enqueue_result(idx, result)
+                result: DataBlob = receive_queues[idx].get(timeout=0.06)
+                num_cfar_results: int = result.cfar_header.length
+                cfar_results: list[DopplerRangeEntry] = result.cfar_payload[:num_cfar_results]
+                num_targets: int = result.aoa_header.length
+                targets: list[AoAEntry] = result.aoa_payload[:num_targets]
+                logger.debug(f"Found {num_cfar_results} CFAR results and {num_targets} targets")
+                logger.debug(f"Aoa Header: Minus1 {result.aoa_header.minus1}, Length {result.aoa_header.length}")
+                for t in targets:
+                    logger.debug(f"Target: X {t.x:.2f}, Y {t.y:.2f}, Z {t.z:.2f}, Velocity {t.velocity:.2f}")
+                for c in cfar_results:
+                    logger.debug(f"CFAR: Doppler {c.doppler}, Range {c.range}")
+                range_doppler = result.range_doppler_data
+                range_doppler_np = np.ctypeslib.as_array(range_doppler)  # pyright: ignore [reportUnknownArgumentType]
+                enqueue_range_doppler_result(
+                    idx,
+                    range_doppler_np.reshape((1024, 512)),  # pyright: ignore [reportUnknownArgumentType]
+                    cfar_results,  # pyright: ignore [reportUnknownArgumentType]
+                )
+                enqueue_targets(idx, targets)  # pyright: ignore [reportUnknownArgumentType]
             except queue.Empty:
                 continue
 
@@ -386,7 +392,7 @@ def sw_stream():
                 frame = (
                     Functor(synthetic_result(GlobalState.get_current_steps()[idx], idx))
                     .bind(heat_map)
-                    .bind(cfar)
+                    .bind(sw_cfar)
                     .bind(create_frame)
                     .value
                 )
@@ -400,6 +406,7 @@ def converter():
         sw_stream()
     receive_queues.flush()
     result_queues.flush()
+    target_queues.flush()
     logger.info("Converter Stopped")
 
 

@@ -47,10 +47,10 @@ class HwInfo(ABC):
         if len(self.frame_rate) == 0:
             return 0
         try:
-            frame_rate = np.mean(self.frame_rate)
+            _fps = np.mean(self.frame_rate)
         except:
-            frame_rate = 0
-        return int(frame_rate)
+            _fps = 0
+        return int(_fps)
 
     @fps.setter
     def fps(self, value: int):
@@ -91,15 +91,13 @@ class HwInfo(ABC):
         else:
             return str(value)
 
-    def pl_usage(
-        self,
-    ) -> int:
+    def pl_usage(self) -> int:
         if GlobalState.cfar_enabled():
             return 53
         return 52
 
     def ps_usage(self) -> int:
-        return 3
+        return GlobalState.num_targets + 3
 
     def get_info(self, settings: Settings):
         data: list[dict[str, str | list[int] | int]] = [
@@ -114,7 +112,7 @@ class HwInfo(ABC):
 
     def format_load(self, load: float) -> str:
         retval_format = '"{' + f"load:.{int(max(1+math.log10(1/load), 0))}f" + '}%"'
-        retval: str = eval(f"f{retval_format}")
+        retval: str = eval(f"f{retval_format}")  # pyright: ignore [reportAny]
         return retval
 
 
@@ -155,9 +153,8 @@ class Fft1DInfo(HwInfo):
             load = -1
             if option in map_min_time:
                 min_time = map_min_time[option]
-                fps = self.fps
                 batch_size = GlobalState.get_current_batch_size()
-                load = min_time * fps * batch_size * 100
+                load = min_time * self.fps * batch_size * 100
                 if GlobalState.parallel_10x_enabled():
                     for i in range(10):
                         retval[i] = min(int(load), 100)
@@ -209,6 +206,8 @@ class RangeDopplerInfo(HwInfo):
         return load
 
     def generic_fft_per_sec_int(self, fft_size: int) -> int:
+        if len(self.frame_rate) == 0:
+            return 0
         channels = 16
         if GlobalState.get_current_model() == Model.SHORT_RANGE:
             channels /= 4

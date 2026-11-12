@@ -14,8 +14,8 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
+from app.logic.buffer_status import buffer_status
 from app.logic.config import STATIC_CONFIG
-from app.logic.flush_card import buffer_status
 from app.logic.logging import LogLevel, get_logger
 from app.logic.output_exception import InputFull, OutputEmpty
 from app.logic.state import GlobalState
@@ -29,6 +29,7 @@ matplotlib.use("agg")
 # Module Global Variables
 #
 
+start_lock: threading.Lock = threading.Lock()
 logger = get_logger(__name__, LogLevel.WARNING)
 
 receive_queue: queue.Queue[NDArray[np.int16]] = queue.Queue(maxsize=7)
@@ -293,29 +294,32 @@ def start_threads() -> None:
     global receiver
     global converter
     logger.debug("Wait for mutex")
-    producer_run.set()
-    receiver_run.set()
-    converter_run.set()
-    flush_queues()
-    logger.debug("Mutex aquired")
-    sender = threading.Thread(target=send_data, name="sender")
-    sender.start()
-    receiver = threading.Thread(target=receive_data, name="receiver")
-    receiver.start()
-    converter = threading.Thread(target=convert_data, name="converter")
-    converter.start()
-    logger.debug("Leaving")
+    if start_lock.acquire(blocking=False):
+        logger.debug("Mutex aquired")
+        producer_run.set()
+        receiver_run.set()
+        converter_run.set()
+        flush_queues()
+        sender = threading.Thread(target=send_data, name="sender")
+        sender.start()
+        receiver = threading.Thread(target=receive_data, name="receiver")
+        receiver.start()
+        converter = threading.Thread(target=convert_data, name="converter")
+        converter.start()
+        logger.debug("Leaving")
 
 
 def stop_threads() -> None:
-    logger.debug("Entering")
-    producer_run.clear()
-    sender.join()
-    receiver.join()
-    converter.join()
-    flush_queues()
-    benchmark_info.reset()
-    logger.debug("Leaving")
+    if start_lock.locked():
+        logger.debug("Entering")
+        producer_run.clear()
+        sender.join()
+        receiver.join()
+        converter.join()
+        flush_queues()
+        benchmark_info.reset()
+        logger.debug("Leaving")
+        start_lock.release()
 
 
 T = TypeVar("T")
@@ -345,7 +349,7 @@ def gen_frames() -> Generator[Any, Any, Any]:  # pyright: ignore [reportExplicit
             frame = result_queue.get_nowait()
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
 
-            if loop_timer.snapshot() > 0.2:
+            if loop_timer.snapshot() > 0.05:
                 # calculate speed for hw
                 count_current = Count
                 benchmark_info.fps = int(1 / loop_timer.duration() * (count_current - count_bak))

@@ -271,6 +271,8 @@ Configure according to the used firmware version below.
 5. Boot the card
 ```radar> boot```
 
+Check that under /boot/ there is no file called image.ub. If it exists you should remove it.
+
 ### Old firmware bundle with image.ub, 4 files
 
 1. Set the boot device
