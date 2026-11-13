@@ -12,7 +12,6 @@
     - role: sshd
     - role: launcher
     - role: kernel
-    - role: asix
     - role: libqdma
     - role: udev
     - role: direnv

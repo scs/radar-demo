@@ -343,18 +343,6 @@ Set IPv6 in the IPv6 Tab to Link-Local only
 
 
 ## Goobay USB Ethernet cable 
-This step does not have to be done normally it is done with the ansible script.
-But it is kept here for documentation purposes.
-
-1. Download driver from here [ASIX Driver](https://www.asix.com.tw/en/support/download/file/1892?time=1732778829482)
-2. Execute the following steps in a terminal
-```
-> cd Downloads
-> tar -jxvf ASIX_USB_NIC_Linux_Driver_Source_v3.4.0.tar.bz2
-> cd ASIX_USB_NIC_Linux_Driver_Source_v3.4.0
-> make
-> sudo make install
-```
-
-Instructions from here [Reddit](https://www.reddit.com/r/HomeNetworking/comments/1ftjlrt/ethernet_over_usb_is_not_working_in_ubuntu_22/?rdt=40984)
+Works out of the box on Ubuntu 24.04+/26.04 using the in-kernel ASIX driver, no
+manual driver build required.
 
