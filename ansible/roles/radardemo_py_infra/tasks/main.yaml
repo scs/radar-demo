@@ -5,14 +5,14 @@
     state: absent
 - name: Build radardemoinfra wheel
   become: false
-  ansible.builtin.shell: "/home/{{ ansible_user_id }}/.local/bin/uv build"
+  ansible.builtin.shell: "/home/{{ ansible_facts['user_id'] }}/.local/bin/uv build"
   args:
     chdir: "{{ playbook_dir }}/roles/radardemo_py_infra/files"
 - name: "Create venv for radardemoinfra at {{ radardemoinfra_venv }}"
   become: true
-  ansible.builtin.shell: "/home/{{ ansible_user_id }}/.local/bin/uv venv --python python3 --allow-existing {{ radardemoinfra_venv }}"
+  ansible.builtin.shell: "/home/{{ ansible_facts['user_id'] }}/.local/bin/uv venv --python python3 --allow-existing {{ radardemoinfra_venv }}"
 - name: Install radardemoinfra into its venv
   become: true
-  ansible.builtin.shell: "/home/{{ ansible_user_id }}/.local/bin/uv pip install --python {{ radardemoinfra_venv }}/bin/python3 dist/*.whl --reinstall"
+  ansible.builtin.shell: "/home/{{ ansible_facts['user_id'] }}/.local/bin/uv pip install --python {{ radardemoinfra_venv }}/bin/python3 dist/*.whl --reinstall"
   args:
     chdir: "{{ playbook_dir }}/roles/radardemo_py_infra/files"

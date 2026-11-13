@@ -38,8 +38,8 @@
       Type=Application
       #Terminal=true
       Name=Radar Demo
-      Icon=/home/{{ ansible_user_id }}/.local/share/radar.png
-      Exec=/home/{{ ansible_user_id }}/start_demo.sh
+      Icon=/home/{{ ansible_facts['user_id'] }}/.local/share/radar.png
+      Exec=/home/{{ ansible_facts['user_id'] }}/start_demo.sh
     mode: '0644'
 - name: Create autostart directory
   become: false
@@ -55,6 +55,6 @@
       Type=Application
       #Terminal=true
       Name=Radar Demo
-      Icon=/home/{{ ansible_user_id }}/.local/share/radar.png
-      Exec=/home/{{ ansible_user_id }}/start_demo.sh
+      Icon=/home/{{ ansible_facts['user_id'] }}/.local/share/radar.png
+      Exec=/home/{{ ansible_facts['user_id'] }}/start_demo.sh
     mode: '0644'
