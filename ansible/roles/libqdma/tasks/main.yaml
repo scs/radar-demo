@@ -3,14 +3,9 @@
   ansible.builtin.git:
     repo: 'https://github.com/Xilinx/dma_ip_drivers.git'
     dest: /tmp/dma_ip_drivers
-    version: d66f224
+    version: a918c51
     force: true
   register: libqdma
-- name: Apply patch for newest kernel
-  become: false
-  ansible.builtin.command:
-    cmd: git apply {{ playbook_dir}}/roles/libqdma/files/0001-QDMA-Add-support-for-6.4.x-kernel-version.patch
-    chdir: /tmp/dma_ip_drivers
 - name: Apply patch for Makefile
   become: false
   ansible.builtin.command:
@@ -21,9 +16,7 @@
   ansible.builtin.package:
     name:
       - make
-      - gcc-12
       - build-essential
-      - libaio1
       - libaio-dev
 - name: "Compile libqdma for Kernel {{ kernel }}"
   become: false
