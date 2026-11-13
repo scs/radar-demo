@@ -31,7 +31,11 @@ def target() -> str:
     fpga = FpgaSerial()
     fpga.append_authorized_key(get_public_key())
     eth_devices = EthDevices()
-    target = f"root@'[{fpga.get_ipv6()}%{eth_devices.usb}]':/boot/."
+    ipv6 = eth_devices.usb_peer_ipv6()
+    if not ipv6:
+        print("ERROR: Could not discover the card's IPv6 address")
+        exit(1)
+    target = f"root@'[{ipv6}%{eth_devices.usb}]':/boot/."
     print(f"Target = {target}")
     return target
 

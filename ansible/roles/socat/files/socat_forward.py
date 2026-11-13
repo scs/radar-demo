@@ -3,7 +3,6 @@ import re
 import subprocess
 
 from radardemoinfra.eth_devices import EthDevices
-from radardemoinfra.fpga_serial import FpgaSerial
 
 
 def get_ipv4_address(device: str) -> str:
@@ -15,7 +14,7 @@ def get_ipv4_address(device: str) -> str:
     )
     lines = result.stdout.split("\n")
     pattern = re.compile(
-        "\s*inet (?P<ipv4>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}).*"  # pyright: ignore [reportInvalidStringEscapeSequence]
+        r"\s*inet (?P<ipv4>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}).*"
     )
     for line in lines:
         if m := pattern.match(line):
@@ -28,13 +27,15 @@ def get_ipv4_address(device: str) -> str:
 if __name__ == "__main__":
     eth_devices = EthDevices()
     ipv4_address = get_ipv4_address(eth_devices.pcie)
-    fpga = FpgaSerial()
-    ipv6_address = fpga.get_ipv6()
+    ipv6_address = eth_devices.usb_peer_ipv6()
+    if not ipv6_address:
+        print("ERROR: Could not discover the card's IPv6 address")
+        exit(1)
     result = subprocess.run(
         [
             "socat",
             "-d",
             f"TCP4-LISTEN:2222,bind={ipv4_address},fork",
-            f"TCP6:'[{ipv6_address}%{eth_devices.usb}]':22",
+            f"TCP6:[{ipv6_address}%{eth_devices.usb}]:22",
         ]
     )

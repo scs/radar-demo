@@ -5,15 +5,6 @@ import time
 import serial
 
 
-def extract_ip_v6(response: str) -> str:
-    pattern = re.compile(r"inet6 ([a-fA-F0-9:]+)")
-    for line in response.splitlines():
-        match = pattern.search(line.strip())
-        if match:
-            return match.group(1)
-    return ""
-
-
 class FpgaSerial:
 
     def __init__(self):
@@ -43,23 +34,6 @@ class FpgaSerial:
         self.serial.write(b"exit\n")
         self.flush_read()
 
-    def read_ip_v6(self) -> str:
-        self.serial.write(b"ip -6 addr show scope link\n")
-        # Wait for the command to execute and response to be returned
-        time.sleep(0.1)
-        # Read the response
-        response = self.serial.read_all()
-        if response:
-            return extract_ip_v6(response.decode("utf-8"))
-        return ""
-
-    def get_ipv6(self) -> str | None:
-        self.login()
-        self.flush_read()
-        ipv6 = self.read_ip_v6()
-        self.logout()
-        return ipv6
-
     def modify_authorized_keys(self, public_key: str):
         public_key = public_key.strip()
         command = f'echo "{public_key}" >> ~/.ssh/authorized_keys\n'.encode("utf-8")
@@ -77,8 +51,3 @@ class FpgaSerial:
 
     def close(self):
         self.serial.close()
-
-
-if __name__ == "__main__":
-    ipv6 = extract_ip_v6("inet6 fe80::a2a6:4eff:fe00:9c8/64 scope link\n")
-    print(f"Extracted IPv6: {ipv6}")
