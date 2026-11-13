@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/radardemoinfra/venv/bin/python3
 import re
 import subprocess
 

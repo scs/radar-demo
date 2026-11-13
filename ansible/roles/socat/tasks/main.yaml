@@ -3,7 +3,6 @@
   ansible.builtin.package:
     name:
       - socat
-      - python3-serial
       - tio
     state: present
 - name: Put user in dialout group

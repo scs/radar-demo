@@ -28,7 +28,7 @@
 
    ```bash
    > cd ~/radar_demo/update_fw/
-   > python3 update_fw.py -s hw
+   > ./update_fw.py -s hw
    ```
 
 5. Connect to the FPGA board with tio

@@ -4,6 +4,10 @@
     # Version of the currently running kernel, e.g. "7.0.0-43" (flavor suffix stripped)
     kernel: "{{ ansible_kernel | regex_replace('-generic$', '') }}"
     repo_dir: "{{ playbook_dir | dirname }}"
+    # Dedicated venv for radardemoinfra, used by scripts that run outside the
+    # backend's own poetry venv (update_fw.py, socat_forward.py). Must match
+    # the shebang in those scripts.
+    radardemoinfra_venv: /opt/radardemoinfra/venv
   roles:
     - role: distupgrade
     - role: git
