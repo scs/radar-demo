@@ -8,11 +8,11 @@ subtitle: "User Guide"
 
 [[_TOC_]]
 
-# System Installation - Ubuntu 22.04
+# System Installation - Ubuntu 26.04
 
 1. Power off the system
-2. Plugin the Ubuntu 22.04 USB stick
-3. Install Ubuntu 22.04
+2. Plugin the Ubuntu 26.04 USB stick
+3. Install Ubuntu 26.04
 
 ![Select Try or Install Ubuntu](./images/01.jpg "Select Try or Install Ubuntu")
 
@@ -87,17 +87,9 @@ Reboot the system and remove the usb stick when asked to
 
 ![Reboot System](./images/08-1.jpg "Reboot System")
 
-Update the software for Ubuntu 22.04
+Update the software for Ubuntu 26.04
 
 ![Software Updater](./images/09.jpg "Software Updater")
-
-<div style="page-break-after: always; visibility: hidden"> 
-\pagebreak 
-</div>
-
-**Do not** update to Ubuntu 24.04
-
-![Skip Ubuntu 24.04 LTS Upgrade](./images/10.jpg "Skip Ubuntu 24.04 LTS Upgrade")
 
 <div style="page-break-after: always; visibility: hidden"> 
 \pagebreak 
