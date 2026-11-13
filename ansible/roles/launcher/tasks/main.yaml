@@ -24,6 +24,11 @@
     src: radar.png
     dest: ~/.local/share/radar.png
     mode: '0644'
+- name: Create applications directory
+  become: false
+  ansible.builtin.file:
+    path: ~/.local/share/applications
+    state: directory
 - name: Create launcher script
   become: false
   ansible.builtin.copy:
