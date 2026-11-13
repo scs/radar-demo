@@ -1,7 +1,17 @@
+- name: Download google chrome
+  become: false
+  ansible.builtin.get_url:
+    url: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    dest: /tmp/google-chrome-stable_current_amd64.deb
+    timeout: 120
+  register: chrome_download
+  until: chrome_download is succeeded
+  retries: 3
+  delay: 5
 - name: Install google chrome
   become: true
   ansible.builtin.apt:
-    deb: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    deb: /tmp/google-chrome-stable_current_amd64.deb
 - name: Fix potential missing dependencies
   become: true
   ansible.builtin.apt:
