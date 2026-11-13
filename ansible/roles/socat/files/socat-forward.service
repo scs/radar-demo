@@ -1,9 +1,12 @@
 [Unit]
 Description=Socat IPv4 to IPv6 Port Forwarding
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
+Restart=on-failure
+RestartSec=5
 WorkingDirectory=/usr/local/bin/
 ExecStart=/usr/local/bin/socat_forward.py
 
