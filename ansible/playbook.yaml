@@ -1,9 +1,8 @@
 - name: Setup Radar Demo
   hosts: dev
   vars:
-    kernel_base: "6.8.0"
-    kernel_patch: "49"
-    kernel: "{{ kernel_base }}-{{ kernel_patch }}"
+    # Version of the currently running kernel, e.g. "7.0.0-43" (flavor suffix stripped)
+    kernel: "{{ ansible_kernel | regex_replace('-generic$', '') }}"
     repo_dir: "{{ playbook_dir | dirname }}"
   roles:
     - role: distupgrade
