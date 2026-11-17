@@ -3,13 +3,17 @@
   ansible.builtin.copy:
     content: |
       #!/bin/bash
+      set -e
       SCRIPT=$(readlink -f "$0")
       SCRIPTPATH=$(dirname "$SCRIPT")
       cd {{ playbook_dir }}/../backend || exit 1
       eval "$(direnv export bash)"
-      killall python3
+      killall python3 || true
       direnv allow .
-      poetry install
+      if ! poetry install; then
+        notify-send -u critical "Radar Demo" "poetry install failed, see terminal for details" || true
+        exit 1
+      fi
       cd /
       cd {{ playbook_dir }}/../backend || exit 1
       python3 run.py &
