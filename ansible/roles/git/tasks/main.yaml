@@ -1,2 +1,15 @@
 - name: Add git rebase config
   ansible.builtin.shell: "git config pull.rebase true"
+- name: Install git-lfs
+  become: true
+  ansible.builtin.package:
+    name: git-lfs
+    state: present
+- name: Register git-lfs filters for this user
+  become: false
+  ansible.builtin.shell: "git lfs install"
+- name: Ensure git-lfs tracked files are smudged (not left as pointer stubs)
+  become: false
+  ansible.builtin.shell: "git lfs pull"
+  args:
+    chdir: "{{ repo_dir }}"
