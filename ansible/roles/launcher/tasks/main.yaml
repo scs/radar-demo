@@ -62,3 +62,22 @@
       Icon=/home/{{ ansible_facts['user_id'] }}/.local/share/radar.png
       Exec=/home/{{ ansible_facts['user_id'] }}/start_demo.sh
     mode: '0644'
+- name: Find gnome-keyring autostart entries
+  become: false
+  ansible.builtin.find:
+    paths: /etc/xdg/autostart
+    patterns: "gnome-keyring-*.desktop"
+  register: keyring_autostart_entries
+- name: Disable gnome-keyring autostart
+  become: false
+  # Autologin never unlocks the login keyring (no password is ever typed),
+  # so the first thing that touches the secret service pops up a manual
+  # unlock prompt. Nothing in this kiosk setup needs it (Chrome is already
+  # configured with --password-store=basic), so just disable it entirely.
+  ansible.builtin.copy:
+    dest: "~/.config/autostart/{{ item.path | basename }}"
+    content: |
+      [Desktop Entry]
+      Hidden=true
+    mode: '0644'
+  loop: "{{ keyring_autostart_entries.files }}"
