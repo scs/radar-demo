@@ -17,6 +17,7 @@
     - role: kernel
     - role: libqdma
     - role: udev
+    - role: pyenv
     - role: direnv
     - role: python
     - role: poetry

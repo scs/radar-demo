@@ -1,3 +1,20 @@
+- name: Install dependencies for pyenv to be able to install python versions
+  become: true
+  ansible.builtin.package:
+    name:
+      - libssl-dev
+      - liblzma-dev
+      - libsqlite3-dev
+      - libffi-dev
+      - libbz2-dev
+      - tk-dev
+      - zlib1g-dev
+      - libreadline-dev
+      - libncursesw5-dev
+      - xz-utils
+      - libxml2-dev
+      - libxmlsec1-dev
+      - build-essential
 - name: Check if pyenv is installed
   become: false
   ansible.builtin.stat:
@@ -24,13 +41,8 @@
       eval "$(pyenv init -)"
     state: present
     create: true
-- name: Install dependencies for pyenv to be able to install python versions
-  become: true
-  ansible.builtin.package:
-    name:
-      - libssl-dev
-      - liblzma-dev
-      - libsqlite3-dev
-      - libffi-dev
-      - libbz2-dev
-      - tk-dev
+- name: Install the Python version pinned by backend/.python-version
+  become: false
+  ansible.builtin.shell: >
+    ~/.pyenv/bin/pyenv install --skip-existing
+    $(cat {{ repo_dir }}/backend/.python-version)

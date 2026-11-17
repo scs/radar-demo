@@ -4,6 +4,19 @@ layout_poetry() {
     exit 2
   fi
 
+  # If a pyenv-managed Python version is pinned for this project, put it
+  # first on PATH so poetry creates its venv with that interpreter instead
+  # of whatever python3 the OS happens to ship.
+  if [[ -f .python-version ]]; then
+    local PINNED_VERSION=$(cat .python-version)
+    local PYENV_VERSION_BIN="$HOME/.pyenv/versions/$PINNED_VERSION/bin"
+    if [[ -d "$PYENV_VERSION_BIN" ]]; then
+      PATH_add "$PYENV_VERSION_BIN"
+    else
+      log_error "pyenv-managed Python $PINNED_VERSION not installed (expected at $PYENV_VERSION_BIN)"
+    fi
+  fi
+
   local VENV=$(dirname $(poetry run which python))
   export VIRTUAL_ENV=$(echo "$VENV" | rev | cut -d'/' -f2- | rev)
   export POETRY_ACTIVE=1

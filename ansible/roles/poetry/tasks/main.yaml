@@ -18,3 +18,9 @@
   become: false
   ansible.builtin.shell: ~/.local/bin/poetry config virtualenvs.in-project true
   tags: poetry
+- name: Ensure backend's poetry.lock matches pyproject.toml
+  become: false
+  ansible.builtin.shell: ~/.local/bin/poetry lock
+  args:
+    chdir: "{{ repo_dir }}/backend"
+  tags: poetry
