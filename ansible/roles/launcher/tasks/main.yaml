@@ -81,3 +81,19 @@
       Hidden=true
     mode: '0644'
   loop: "{{ keyring_autostart_entries.files }}"
+- name: Remove stale encrypted login keyring
+  become: false
+  # PAM's pam_gnome_keyring.so (session ... auto_start) starts the keyring
+  # daemon at login independently of the autostart entries above. Under
+  # autologin it never gets a password to auto-unlock an existing encrypted
+  # "login" keyring with, so it would prompt forever. Removing it lets
+  # GNOME create a fresh keyring on next login; choose "Continue" with a
+  # blank password when prompted (one-time, can't be scripted headlessly).
+  # Once that blank-password keyring exists (named Default.keyring/default,
+  # not login.keyring/user.keystore) this task is a no-op.
+  ansible.builtin.file:
+    path: "~/.local/share/keyrings/{{ item }}"
+    state: absent
+  loop:
+    - login.keyring
+    - user.keystore
