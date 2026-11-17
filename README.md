@@ -204,6 +204,12 @@ Please do not stop the update once started.
 For the update the password of the current user is required to gain root
 privileges.
 
+After the reboot, the first time you log in you may be prompted with a
+dialog asking to create a new keyring. Choose **Continue** and leave the
+password fields empty (you will get a warning about storing passwords
+unencrypted; this is expected and fine for this demo machine). This is a
+one-time step per machine.
+
 For the demo to run you will additionally require the stimuli files. These are
 not distributed through git as the size is to large.
 
