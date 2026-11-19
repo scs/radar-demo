@@ -350,7 +350,7 @@ def enqueue_targets(idx: int, targets: list[AoAEntry]) -> None:
                 {
                     "x": t.x,  # pyright: ignore [reportAny]
                     "y": t.y,  # pyright: ignore [reportAny]
-                    "z": t.z,  # pyright: ignore [reportAny]
+                    "z": t.z + 4,  # pyright: ignore [reportAny]
                     "velocity": t.velocity,  # pyright: ignore [reportAny]
                 }
                 for t in targets
