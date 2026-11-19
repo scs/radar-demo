@@ -99,7 +99,7 @@ def modified_steps() -> list[int]:
     steps[0] = steps[0] % 90
     steps[1] = steps[1] % 120
     steps[2] = steps[2] % 180
-    steps[3] = steps[3] % 380
+    steps[3] = steps[3] % 360
     return steps
 
 
@@ -348,9 +348,9 @@ def enqueue_targets(idx: int, targets: list[AoAEntry]) -> None:
         target_queues[idx].put(
             [
                 {
-                    "x": -1 * t.y,  # pyright: ignore [reportAny]
-                    "y": t.x,  # pyright: ignore [reportAny]
-                    "z": t.z + 4,  # pyright: ignore [reportAny]
+                    "x": t.x,  # pyright: ignore [reportAny]
+                    "y": t.y,  # pyright: ignore [reportAny]
+                    "z": t.z,  # pyright: ignore [reportAny]
                     "velocity": t.velocity,  # pyright: ignore [reportAny]
                 }
                 for t in targets
