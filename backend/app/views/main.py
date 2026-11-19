@@ -19,7 +19,6 @@ from app.logic.status import gen_radar_data
 # Module Global Variables
 #
 HW_LOCK: threading.Lock = threading.Lock()
-MINIMAL_UPTIME: int = 20  # seconds
 
 logger = get_logger(__name__, LogLevel.WARNING)
 
